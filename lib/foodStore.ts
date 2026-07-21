@@ -4,11 +4,32 @@ import { supabase } from "./supabaseClient";
 import {
   FoodItem,
   FoodLogEntry,
+  MealSlot,
   MealWithItems,
   NutritionGoals,
   RecipeWithIngredients,
 } from "./types";
-import { OffSearchResult } from "./openFoodFacts";
+import { FoodSearchResult } from "./usdaFoodData";
+
+export const MEAL_SLOT_ORDER: MealSlot[] = [
+  "breakfast",
+  "morning_snack",
+  "lunch",
+  "afternoon_snack",
+  "dinner",
+  "evening_snack",
+  "other",
+];
+
+export const MEAL_SLOT_LABELS: Record<MealSlot, string> = {
+  breakfast: "Breakfast",
+  morning_snack: "Morning Snack",
+  lunch: "Lunch",
+  afternoon_snack: "Afternoon Snack",
+  dinner: "Dinner",
+  evening_snack: "Evening Snack",
+  other: "Other",
+};
 
 function rowToFood(row: any): FoodItem {
   return {
@@ -44,6 +65,8 @@ function rowToLog(row: any): FoodLogEntry {
     sodiumMg: Number(row.sodium_mg),
     sourceType: row.source_type,
     sourceId: row.source_id,
+    mealSlot: row.meal_slot ?? "other",
+    notes: row.notes ?? null,
   };
 }
 
@@ -95,7 +118,7 @@ export async function createFoodItem(
 
 export async function saveSearchResultAsFood(
   userId: string,
-  result: OffSearchResult
+  result: FoodSearchResult
 ): Promise<FoodItem | null> {
   return createFoodItem(userId, {
     name: result.name,
@@ -150,6 +173,8 @@ export async function addLogEntry(
       sodium_mg: input.sodiumMg,
       source_type: input.sourceType,
       source_id: input.sourceId,
+      meal_slot: input.mealSlot,
+      notes: input.notes,
     })
     .select()
     .single();
@@ -270,6 +295,21 @@ export async function createRecipe(
 export async function deleteRecipe(id: string) {
   const { error } = await supabase.from("recipes").delete().eq("id", id);
   if (error) console.error("Failed to delete recipe:", error.message);
+}
+
+export async function fetchFoodLoggedDatesInRange(
+  userId: string,
+  startDate: string,
+  endDate: string
+): Promise<string[]> {
+  const { data, error } = await supabase
+    .from("food_logs")
+    .select("date")
+    .eq("user_id", userId)
+    .gte("date", startDate)
+    .lte("date", endDate);
+  if (error) return [];
+  return Array.from(new Set((data ?? []).map((r: any) => r.date as string)));
 }
 
 // Nutrition helpers -------------------------------------------------------------

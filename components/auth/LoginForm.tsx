@@ -59,7 +59,7 @@ export default function LoginForm() {
           required
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          className="w-full mb-3 bg-[#F7F8FA] border border-[#E5E7EB] rounded-md px-3 py-2 text-sm text-[#1D2027] focus:outline-none focus:border-[#4C6EF5]"
+          className="w-full mb-3 bg-[#F7F8FA] border border-[#E5E7EB] rounded-md px-3 py-2 text-sm text-[#1D2027] focus:outline-none focus:border-[#0D9488]"
           placeholder="you@example.com"
         />
 
@@ -70,7 +70,7 @@ export default function LoginForm() {
           minLength={6}
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          className="w-full mb-4 bg-[#F7F8FA] border border-[#E5E7EB] rounded-md px-3 py-2 text-sm text-[#1D2027] focus:outline-none focus:border-[#4C6EF5]"
+          className="w-full mb-4 bg-[#F7F8FA] border border-[#E5E7EB] rounded-md px-3 py-2 text-sm text-[#1D2027] focus:outline-none focus:border-[#0D9488]"
           placeholder="••••••••"
         />
 
@@ -84,7 +84,7 @@ export default function LoginForm() {
         <button
           type="submit"
           disabled={loading}
-          className="w-full rounded-md bg-[#4C6EF5] text-white text-sm font-medium py-2 disabled:opacity-60"
+          className="w-full rounded-md bg-[#0D9488] text-white text-sm font-medium py-2 disabled:opacity-60"
         >
           {loading
             ? "Please wait..."

@@ -10,6 +10,19 @@ export function todayDateString() {
   return dateToString(new Date());
 }
 
+// Formats a Date as YYYY-MM-DD using its LOCAL calendar date (whatever
+// timezone the browser/device is set to), not its UTC date.
+//
+// The previous version used d.toISOString(), which always converts through
+// UTC. That's fine for a Date built as local midnight (e.g. calendar grid
+// cells), but for "right now" it's wrong for a big chunk of the day: someone
+// in US Central time testing in the evening would have their local "today"
+// silently saved as tomorrow's UTC date, since UTC is already several hours
+// ahead. This showed up as newly created tasks/entries not appearing under
+// "today" — they were real, just filed under the wrong date.
 export function dateToString(d: Date) {
-  return d.toISOString().slice(0, 10); // YYYY-MM-DD
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }

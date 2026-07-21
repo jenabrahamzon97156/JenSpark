@@ -64,7 +64,7 @@ function AddEntryForm({
             onClick={() => setEntryType(t)}
             className={`text-xs px-3 py-1.5 rounded-full border capitalize ${
               entryType === t
-                ? "bg-[#4C6EF5] text-white border-[#4C6EF5]"
+                ? "bg-[#0D9488] text-white border-[#0D9488]"
                 : "border-[#E5E7EB] text-[#6B7280]"
             }`}
           >
@@ -123,12 +123,12 @@ function AddEntryForm({
           inputMode="decimal"
           value={value}
           onChange={(e) => setValue(e.target.value)}
-          className="flex-1 bg-[#F7F8FA] border border-[#E5E7EB] rounded-md px-3 py-2 text-sm font-mono text-[#1D2027] focus:outline-none focus:border-[#4C6EF5]"
+          className="flex-1 bg-[#F7F8FA] border border-[#E5E7EB] rounded-md px-3 py-2 text-sm font-mono text-[#1D2027] focus:outline-none focus:border-[#0D9488]"
         />
         <span className="text-sm text-[#6B7280] w-8">{entryType === "weight" ? "lb" : "in"}</span>
       </div>
 
-      <button onClick={save} className="w-full rounded-md bg-[#4C6EF5] text-white text-sm font-medium py-2">
+      <button onClick={save} className="w-full rounded-md bg-[#0D9488] text-white text-sm font-medium py-2">
         Save entry
       </button>
     </div>

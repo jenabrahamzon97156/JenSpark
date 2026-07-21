@@ -7,9 +7,9 @@ import AppShell from "@/components/AppShell";
 import AddFoodPanel from "@/components/food/AddFoodPanel";
 import MealsRecipesManager from "@/components/food/MealsRecipesManager";
 import { useAuth } from "@/lib/useAuth";
-import { FoodItem, FoodLogEntry, MealWithItems, NutritionGoals, RecipeWithIngredients } from "@/lib/types";
+import { FoodItem, FoodLogEntry, MealSlot, MealWithItems, NutritionGoals, RecipeWithIngredients } from "@/lib/types";
 import { dateToString, todayDateString } from "@/lib/workoutStore";
-import { OffSearchResult } from "@/lib/openFoodFacts";
+import { FoodSearchResult } from "@/lib/usdaFoodData";
 import {
   addLogEntry,
   createFoodItem,
@@ -23,6 +23,8 @@ import {
   fetchLogEntriesForDate,
   fetchMeals,
   fetchRecipes,
+  MEAL_SLOT_LABELS,
+  MEAL_SLOT_ORDER,
   saveGoals,
   saveSearchResultAsFood,
   scaleFood,
@@ -39,7 +41,7 @@ function ProgressBar({ label, value, goal, unit }: { label: string; value: numbe
         </span>
       </div>
       <div className="h-2 rounded-full bg-[#F1F2F4] overflow-hidden">
-        <div className="h-full bg-[#4C6EF5] rounded-full" style={{ width: `${pct}%` }} />
+        <div className="h-full bg-[#0D9488] rounded-full" style={{ width: `${pct}%` }} />
       </div>
     </div>
   );
@@ -51,7 +53,7 @@ function GoalsEditor({ goals, onSave, onClose }: { goals: NutritionGoals; onSave
   const [fiberG, setFiberG] = useState(String(goals.fiberG));
 
   return (
-    <div className="rounded-xl border border-[#4C6EF5] bg-[#4C6EF5]/5 p-4 mb-4">
+    <div className="rounded-xl border border-[#0D9488] bg-[#0D9488]/5 p-4 mb-4">
       <p className="text-sm font-medium text-[#1D2027] mb-3">Daily goals</p>
       <div className="grid grid-cols-3 gap-2 mb-3">
         <div>
@@ -88,7 +90,7 @@ function GoalsEditor({ goals, onSave, onClose }: { goals: NutritionGoals; onSave
             onSave({ calories: Number(calories) || 0, proteinG: Number(proteinG) || 0, fiberG: Number(fiberG) || 0 });
             onClose();
           }}
-          className="flex-1 rounded-md bg-[#4C6EF5] text-white text-sm font-medium py-2"
+          className="flex-1 rounded-md bg-[#0D9488] text-white text-sm font-medium py-2"
         >
           Save goals
         </button>
@@ -161,7 +163,7 @@ export default function FoodPage() {
     setDate(dateToString(d));
   };
 
-  const logFood = async (food: FoodItem, quantity: number) => {
+  const logFood = async (food: FoodItem, quantity: number, mealSlot: MealSlot, notes: string | null) => {
     if (!user) return;
     const s = scaleFood(food, quantity);
     const created = await addLogEntry(user.id, {
@@ -170,12 +172,14 @@ export default function FoodPage() {
       quantity,
       sourceType: "food",
       sourceId: food.id,
+      mealSlot,
+      notes,
       ...s,
     });
     if (created) setEntries((prev) => [...prev, created]);
   };
 
-  const logMeal = async (meal: MealWithItems) => {
+  const logMeal = async (meal: MealWithItems, mealSlot: MealSlot, notes: string | null) => {
     if (!user) return;
     for (const item of meal.items) {
       const s = scaleFood(item.food, item.quantity);
@@ -185,6 +189,8 @@ export default function FoodPage() {
         quantity: item.quantity,
         sourceType: "meal",
         sourceId: meal.id,
+        mealSlot,
+        notes,
         ...s,
       });
       if (created) setEntries((prev) => [...prev, created]);
@@ -192,7 +198,12 @@ export default function FoodPage() {
     setShowAdd(false);
   };
 
-  const logRecipe = async (recipe: RecipeWithIngredients, servingsEaten: number) => {
+  const logRecipe = async (
+    recipe: RecipeWithIngredients,
+    servingsEaten: number,
+    mealSlot: MealSlot,
+    notes: string | null
+  ) => {
     if (!user) return;
     // Per-serving nutrition = sum of all ingredients / total recipe servings,
     // then scaled by however many servings were actually eaten.
@@ -220,6 +231,8 @@ export default function FoodPage() {
       quantity: servingsEaten,
       sourceType: "recipe",
       sourceId: recipe.id,
+      mealSlot,
+      notes,
       calories: perServing.calories * servingsEaten,
       proteinG: perServing.proteinG * servingsEaten,
       fiberG: perServing.fiberG * servingsEaten,
@@ -239,7 +252,7 @@ export default function FoodPage() {
           <h1 className="text-2xl font-semibold tracking-tight text-[#1D2027]">Food Tracking</h1>
           <button
             onClick={() => setShowGoalsEditor((s) => !s)}
-            className="text-xs text-[#4C6EF5] font-medium"
+            className="text-xs text-[#0D9488] font-medium"
           >
             Edit goals
           </button>
@@ -283,7 +296,7 @@ export default function FoodPage() {
           </div>
           <button
             onClick={() => setShowFullNutrition((s) => !s)}
-            className="text-xs text-[#4C6EF5] font-medium mt-3"
+            className="text-xs text-[#0D9488] font-medium mt-3"
           >
             {showFullNutrition ? "Hide" : "Show"} full nutrition
           </button>
@@ -312,31 +325,41 @@ export default function FoodPage() {
         {loading ? (
           <p className="text-sm text-[#6B7280]">Loading...</p>
         ) : (
-          <div className="flex flex-col gap-2 mb-4">
+          <div className="flex flex-col gap-4 mb-4">
             {entries.length === 0 && (
               <p className="text-sm text-[#6B7280] py-3 text-center">Nothing logged for this day yet.</p>
             )}
-            {entries.map((e) => (
-              <div
-                key={e.id}
-                className="flex items-center justify-between rounded-lg border border-[#E5E7EB] bg-white px-3 py-2.5"
-              >
-                <div className="min-w-0">
-                  <p className="text-sm text-[#1D2027] truncate">{e.entryName}</p>
-                  <p className="text-xs text-[#6B7280]">
-                    {Math.round(e.calories)} kcal &middot; {Math.round(e.proteinG)}g protein
-                  </p>
+            {MEAL_SLOT_ORDER.filter((slot) => entries.some((e) => e.mealSlot === slot)).map((slot) => (
+              <div key={slot}>
+                <p className="text-xs font-medium text-[#6B7280] mb-1.5">{MEAL_SLOT_LABELS[slot]}</p>
+                <div className="flex flex-col gap-2">
+                  {entries
+                    .filter((e) => e.mealSlot === slot)
+                    .map((e) => (
+                      <div
+                        key={e.id}
+                        className="flex items-center justify-between rounded-lg border border-[#E5E7EB] bg-white px-3 py-2.5"
+                      >
+                        <div className="min-w-0">
+                          <p className="text-sm text-[#1D2027] truncate">{e.entryName}</p>
+                          <p className="text-xs text-[#6B7280]">
+                            {Math.round(e.calories)} kcal &middot; {Math.round(e.proteinG)}g protein
+                          </p>
+                          {e.notes && <p className="text-xs text-[#9CA3AF] italic mt-0.5">{e.notes}</p>}
+                        </div>
+                        <button
+                          onClick={async () => {
+                            setEntries((prev) => prev.filter((x) => x.id !== e.id));
+                            await deleteLogEntry(e.id);
+                          }}
+                          className="text-[#9CA3AF] hover:text-[#DC2626] text-sm px-1 shrink-0"
+                          aria-label="Remove entry"
+                        >
+                          {"\u00d7"}
+                        </button>
+                      </div>
+                    ))}
                 </div>
-                <button
-                  onClick={async () => {
-                    setEntries((prev) => prev.filter((x) => x.id !== e.id));
-                    await deleteLogEntry(e.id);
-                  }}
-                  className="text-[#9CA3AF] hover:text-[#DC2626] text-sm px-1 shrink-0"
-                  aria-label="Remove entry"
-                >
-                  {"\u00d7"}
-                </button>
               </div>
             ))}
           </div>
@@ -348,7 +371,7 @@ export default function FoodPage() {
               setShowAdd((s) => !s);
               setShowManager(false);
             }}
-            className="flex-1 rounded-md bg-[#4C6EF5] text-white text-sm font-medium py-2.5"
+            className="flex-1 rounded-md bg-[#0D9488] text-white text-sm font-medium py-2.5"
           >
             + Add food
           </button>
@@ -372,18 +395,18 @@ export default function FoodPage() {
             onLogFood={logFood}
             onLogMeal={logMeal}
             onLogRecipe={logRecipe}
-            onSaveSearchResult={async (result: OffSearchResult) => {
+            onSaveSearchResult={async (result: FoodSearchResult) => {
               if (!user) return null;
               const created = await saveSearchResultAsFood(user.id, result);
               if (created) setMyFoods((prev) => [...prev, created]);
               return created;
             }}
-            onCreateManualFood={async (food) => {
+            onCreateManualFood={async (food, mealSlot, notes) => {
               if (!user) return;
               const created = await createFoodItem(user.id, food);
               if (created) {
                 setMyFoods((prev) => [...prev, created]);
-                logFood(created, 1);
+                logFood(created, 1, mealSlot, notes);
               }
             }}
           />

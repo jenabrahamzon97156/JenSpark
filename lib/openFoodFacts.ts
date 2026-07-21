@@ -1,31 +1,19 @@
 // lib/openFoodFacts.ts
 //
-// Open Food Facts (openfoodfacts.org) is a free, open, community-run
-// nutrition database with no API key or rate-limit signup required — a
-// reasonable default for a personal app. Results are per-100g by default,
-// which is why searchResultToFoodItem below normalizes everything to a
-// "100 g" serving; the person can adjust the serving size after saving it
-// to their own food library.
+// Open Food Facts (openfoodfacts.org) — free, no API key needed. Weaker
+// than USDA for general "chicken breast" style search, but stronger for
+// specific packaged/branded products (regional snacks, specific SKUs) since
+// it's built from real product scans. Offered as a second source alongside
+// USDA in the Search tab, not a replacement for it.
 
-export interface OffSearchResult {
-  externalId: string;
-  name: string;
-  brand: string | null;
-  calories: number;
-  proteinG: number;
-  fiberG: number;
-  sugarG: number;
-  fatG: number;
-  carbsG: number;
-  sodiumMg: number;
-}
+import { FoodSearchResult } from "./usdaFoodData";
 
 function num(v: unknown): number {
   const n = Number(v);
   return Number.isFinite(n) ? Math.round(n * 10) / 10 : 0;
 }
 
-export async function searchFoods(query: string): Promise<OffSearchResult[]> {
+export async function searchFoods(query: string): Promise<FoodSearchResult[]> {
   if (!query.trim()) return [];
 
   const url =

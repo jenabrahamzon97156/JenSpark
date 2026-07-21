@@ -13,6 +13,7 @@ const TABS = [
   { href: "/food", label: "Food", icon: "\ud83c\udf7d" },
   { href: "/dashboard", label: "Fitness", icon: "\ud83d\udcaa" },
   { href: "/stats", label: "Stats", icon: "\ud83d\udcc8" },
+  { href: "/extras", label: "Extras", icon: "\u2728" },
 ];
 
 export default function BottomNav() {
@@ -30,9 +31,9 @@ export default function BottomNav() {
           <button
             key={tab.href}
             onClick={() => router.push(tab.href)}
-            className={`flex flex-col md:flex-row items-center gap-0.5 md:gap-2 px-3 py-1.5 rounded-lg text-xs md:text-sm transition-colors ${
+            className={`flex flex-col md:flex-row items-center gap-0.5 md:gap-2 px-2 md:px-3 py-1.5 rounded-lg text-[10px] md:text-sm transition-colors ${
               active
-                ? "text-[#4C6EF5] bg-[#4C6EF5]/10 font-medium"
+                ? "text-[#0D9488] bg-[#0D9488]/10 font-medium"
                 : "text-[#6B7280] hover:bg-[#F1F2F4]"
             }`}
           >

@@ -70,7 +70,7 @@ export default function MealsRecipesManager({
             key={m}
             onClick={() => setMode(m)}
             className={`text-xs px-3 py-1.5 rounded-full border capitalize ${
-              mode === m ? "bg-[#4C6EF5] text-white border-[#4C6EF5]" : "border-[#E5E7EB] text-[#6B7280]"
+              mode === m ? "bg-[#0D9488] text-white border-[#0D9488]" : "border-[#E5E7EB] text-[#6B7280]"
             }`}
           >
             New {m}
@@ -82,7 +82,7 @@ export default function MealsRecipesManager({
         placeholder={mode === "meal" ? "Meal name, e.g. 'My usual breakfast'" : "Recipe name"}
         value={name}
         onChange={(e) => setName(e.target.value)}
-        className="w-full mb-2 bg-[#F7F8FA] border border-[#E5E7EB] rounded-md px-3 py-2 text-sm text-[#1D2027] focus:outline-none focus:border-[#4C6EF5]"
+        className="w-full mb-2 bg-[#F7F8FA] border border-[#E5E7EB] rounded-md px-3 py-2 text-sm text-[#1D2027] focus:outline-none focus:border-[#0D9488]"
       />
 
       {mode === "recipe" && (
@@ -91,7 +91,7 @@ export default function MealsRecipesManager({
           type="number"
           value={servings}
           onChange={(e) => setServings(e.target.value)}
-          className="w-full mb-2 bg-[#F7F8FA] border border-[#E5E7EB] rounded-md px-3 py-2 text-sm text-[#1D2027] focus:outline-none focus:border-[#4C6EF5]"
+          className="w-full mb-2 bg-[#F7F8FA] border border-[#E5E7EB] rounded-md px-3 py-2 text-sm text-[#1D2027] focus:outline-none focus:border-[#0D9488]"
         />
       )}
 
@@ -124,7 +124,7 @@ export default function MealsRecipesManager({
         })}
       </div>
 
-      <button onClick={save} className="w-full rounded-md bg-[#4C6EF5] text-white text-sm font-medium py-2 mb-4">
+      <button onClick={save} className="w-full rounded-md bg-[#0D9488] text-white text-sm font-medium py-2 mb-4">
         Save {mode}
       </button>
 

@@ -30,6 +30,20 @@ instead of losing it when you close the browser tab.
    Providers → Email**, turn off "Confirm email" so you can sign up and start
    using the app immediately without clicking a confirmation link.
 
+## 0.5. Get a food search API key
+
+The Food Tracking tab's Search feature looks foods up against USDA
+FoodData Central. This needs a free API key (no cost, no credit card):
+
+1. Go to [api.data.gov/signup](https://api.data.gov/signup/), fill in your
+   name and email.
+2. Check your email — the key arrives within a few seconds.
+3. Add it to your `.env.local` (see step 1 below) as
+   `NEXT_PUBLIC_USDA_API_KEY`.
+
+If you skip this, the rest of the app works fine — only the food Search tab
+will show an error until a key is added.
+
 ## 1. Get it running on your Mac first
 
 You need [Node.js](https://nodejs.org) installed (the free LTS version is fine).
@@ -67,9 +81,10 @@ Vercel is made by the Next.js team — it's the path of least resistance.
 
 1. Go to [vercel.com](https://vercel.com) and sign up with your GitHub account.
 2. Click **Add New → Project**, pick your `workout-tracker` repo.
-3. Before deploying, expand **Environment Variables** and add the same two
-   values from your `.env.local`: `NEXT_PUBLIC_SUPABASE_URL` and
-   `NEXT_PUBLIC_SUPABASE_ANON_KEY`. Without these the deployed app won't be
+3. Before deploying, expand **Environment Variables** and add the same
+   values from your `.env.local`: `NEXT_PUBLIC_SUPABASE_URL`,
+   `NEXT_PUBLIC_SUPABASE_ANON_KEY`, and `NEXT_PUBLIC_USDA_API_KEY`. Without
+   these the deployed app won't be
    able to save anything.
 4. Click **Deploy**.
 5. In a minute or two you'll get a URL like `workout-tracker-yourname.vercel.app`.

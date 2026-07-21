@@ -3,10 +3,8 @@
 // app/home/page.tsx
 //
 // The at-a-glance landing page: today's status across every tracked area,
-// a weekly rollup, and a monthly calendar showing which days had food
-// and/or fitness logged. Food logging doesn't exist yet (Phase 2), so its
-// calendar icon is shown greyed-out as a preview of what's coming rather
-// than pretending data exists that doesn't.
+// a weekly rollup, and a monthly calendar showing which days had fitness,
+// food, and/or custom Extras entries logged.
 
 import { useEffect, useMemo, useState } from "react";
 import AppShell from "@/components/AppShell";
@@ -14,6 +12,8 @@ import { useAuth } from "@/lib/useAuth";
 import { supabase } from "@/lib/supabaseClient";
 import { dateToString, todayDateString } from "@/lib/workoutStore";
 import { fetchAllFitnessDatesInRange } from "@/lib/fitnessStore";
+import { fetchFoodLoggedDatesInRange } from "@/lib/foodStore";
+import { fetchExtraRecordDatesInRange } from "@/lib/extrasStore";
 import { fetchActiveTasks, fetchCompletionsForDate, taskAppliesOnDate } from "@/lib/tasksStore";
 import { fetchLatestValue } from "@/lib/statsStore";
 import { DailyTask } from "@/lib/types";
@@ -37,6 +37,8 @@ export default function HomePage() {
 
   const [weekFitnessDays, setWeekFitnessDays] = useState(0);
   const [monthWorkoutDates, setMonthWorkoutDates] = useState<Set<string>>(new Set());
+  const [monthFoodDates, setMonthFoodDates] = useState<Set<string>>(new Set());
+  const [monthExtrasByDate, setMonthExtrasByDate] = useState<Map<string, string[]>>(new Map());
 
   const today = todayDateString();
   const now = new Date();
@@ -51,12 +53,14 @@ export default function HomePage() {
       const monthStart = dateToString(new Date(now.getFullYear(), now.getMonth(), 1));
       const monthEnd = dateToString(new Date(now.getFullYear(), now.getMonth() + 1, 0));
 
-      const [tasks, completions, weekDates, monthDates, weight] = await Promise.all([
+      const [tasks, completions, weekDates, monthDates, weight, monthFood, monthExtras] = await Promise.all([
         fetchActiveTasks(user!.id),
         fetchCompletionsForDate(user!.id, today),
         fetchAllFitnessDatesInRange(user!.id, weekStart, today),
         fetchAllFitnessDatesInRange(user!.id, monthStart, monthEnd),
         fetchLatestValue(user!.id, "weight", null),
+        fetchFoodLoggedDatesInRange(user!.id, monthStart, monthEnd),
+        fetchExtraRecordDatesInRange(user!.id, monthStart, monthEnd),
       ]);
 
       if (cancelled) return;
@@ -66,6 +70,14 @@ export default function HomePage() {
       setFitnessLoggedToday(monthDates.includes(today));
       setWeekFitnessDays(new Set(weekDates).size);
       setMonthWorkoutDates(new Set(monthDates));
+      setMonthFoodDates(new Set(monthFood));
+      const extrasMap = new Map<string, string[]>();
+      for (const e of monthExtras) {
+        const list = extrasMap.get(e.date) ?? [];
+        if (!list.includes(e.emoji)) list.push(e.emoji);
+        extrasMap.set(e.date, list);
+      }
+      setMonthExtrasByDate(extrasMap);
       setLatestWeight(weight);
       setLoading(false);
     }
@@ -155,7 +167,7 @@ export default function HomePage() {
                 <p className="text-sm font-medium text-[#1D2027]">{monthLabel}</p>
                 <div className="flex items-center gap-3 text-[11px] text-[#9CA3AF]">
                   <span>{"\ud83d\udcaa"} fitness</span>
-                  <span className="opacity-50">{"\ud83c\udf7d\ufe0f"} food (soon)</span>
+                  <span>{"\ud83c\udf7d\ufe0f"} food</span>
                 </div>
               </div>
               <div className="grid grid-cols-7 gap-1 text-center">
@@ -167,16 +179,22 @@ export default function HomePage() {
                 {calendarDays.map((cell, i) => {
                   if (!cell.date) return <div key={i} />;
                   const hasFitness = monthWorkoutDates.has(cell.date);
+                  const hasFood = monthFoodDates.has(cell.date);
+                  const extrasEmoji = monthExtrasByDate.get(cell.date) ?? [];
                   const isToday = cell.date === today;
                   return (
                     <div
                       key={i}
                       className={`aspect-square rounded-md flex flex-col items-center justify-center text-[11px] ${
-                        isToday ? "bg-[#4C6EF5]/10 ring-1 ring-[#4C6EF5]" : ""
+                        isToday ? "bg-[#0D9488]/10 ring-1 ring-[#0D9488]" : ""
                       }`}
                     >
                       <span className="text-[#1D2027]">{cell.day}</span>
-                      <span className="text-[10px] leading-none">{hasFitness ? "\ud83d\udcaa" : ""}</span>
+                      <span className="text-[9px] leading-none flex gap-0.5">
+                        {hasFitness && "\ud83d\udcaa"}
+                        {hasFood && "\ud83c\udf7d"}
+                        {extrasEmoji.slice(0, 2).join("")}
+                      </span>
                     </div>
                   );
                 })}

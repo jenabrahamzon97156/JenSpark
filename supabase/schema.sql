@@ -25,18 +25,22 @@ create index if not exists workout_days_user_date_idx
 -- Row-level security: every user can only ever see or write their own rows.
 alter table workout_days enable row level security;
 
+drop policy if exists "Users can view their own workout days" on workout_days;
 create policy "Users can view their own workout days"
   on workout_days for select
   using (auth.uid() = user_id);
 
+drop policy if exists "Users can insert their own workout days" on workout_days;
 create policy "Users can insert their own workout days"
   on workout_days for insert
   with check (auth.uid() = user_id);
 
+drop policy if exists "Users can update their own workout days" on workout_days;
 create policy "Users can update their own workout days"
   on workout_days for update
   using (auth.uid() = user_id);
 
+drop policy if exists "Users can delete their own workout days" on workout_days;
 create policy "Users can delete their own workout days"
   on workout_days for delete
   using (auth.uid() = user_id);
@@ -76,11 +80,13 @@ create index if not exists task_completions_user_date_idx
 alter table daily_tasks enable row level security;
 alter table task_completions enable row level security;
 
+drop policy if exists "Users manage their own tasks" on daily_tasks;
 create policy "Users manage their own tasks"
   on daily_tasks for all
   using (auth.uid() = user_id)
   with check (auth.uid() = user_id);
 
+drop policy if exists "Users manage their own task completions" on task_completions;
 create policy "Users manage their own task completions"
   on task_completions for all
   using (auth.uid() = user_id)
@@ -106,6 +112,7 @@ create index if not exists stat_entries_user_type_date_idx
 
 alter table stat_entries enable row level security;
 
+drop policy if exists "Users manage their own stat entries" on stat_entries;
 create policy "Users manage their own stat entries"
   on stat_entries for all
   using (auth.uid() = user_id)
@@ -221,18 +228,25 @@ alter table recipe_ingredients enable row level security;
 alter table food_logs enable row level security;
 alter table nutrition_goals enable row level security;
 
+drop policy if exists "Users manage their own food items" on food_items;
 create policy "Users manage their own food items"
   on food_items for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+drop policy if exists "Users manage their own meals" on meals;
 create policy "Users manage their own meals"
   on meals for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+drop policy if exists "Users manage their own meal items" on meal_items;
 create policy "Users manage their own meal items"
   on meal_items for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+drop policy if exists "Users manage their own recipes" on recipes;
 create policy "Users manage their own recipes"
   on recipes for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+drop policy if exists "Users manage their own recipe ingredients" on recipe_ingredients;
 create policy "Users manage their own recipe ingredients"
   on recipe_ingredients for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+drop policy if exists "Users manage their own food logs" on food_logs;
 create policy "Users manage their own food logs"
   on food_logs for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+drop policy if exists "Users manage their own nutrition goals" on nutrition_goals;
 create policy "Users manage their own nutrition goals"
   on nutrition_goals for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
@@ -299,12 +313,16 @@ alter table workout_items enable row level security;
 alter table fitness_logs enable row level security;
 alter table fitness_sets enable row level security;
 
+drop policy if exists "Users manage their own workouts" on workouts;
 create policy "Users manage their own workouts"
   on workouts for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+drop policy if exists "Users manage their own workout items" on workout_items;
 create policy "Users manage their own workout items"
   on workout_items for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+drop policy if exists "Users manage their own fitness logs" on fitness_logs;
 create policy "Users manage their own fitness logs"
   on fitness_logs for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+drop policy if exists "Users manage their own fitness sets" on fitness_sets;
 create policy "Users manage their own fitness sets"
   on fitness_sets for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
@@ -314,12 +332,110 @@ create policy "Users manage their own fitness sets"
 
 create table if not exists user_settings (
   user_id uuid primary key references auth.users (id) on delete cascade,
-  stats_reminder_frequency text not null default 'off' -- 'off' | 'daily' | 'weekly'
+  stats_reminder_frequency text not null default 'off', -- 'off' | 'daily' | 'weekly'
+  rest_timer_default_seconds int not null default 60
 );
 
 alter table user_settings enable row level security;
 
+drop policy if exists "Users manage their own settings" on user_settings;
 create policy "Users manage their own settings"
   on user_settings for all
   using (auth.uid() = user_id)
   with check (auth.uid() = user_id);
+
+-- In case user_settings already existed from before this column was added.
+alter table user_settings add column if not exists rest_timer_default_seconds int not null default 60;
+alter table user_settings add column if not exists distance_unit_default text not null default 'mi'; -- 'mi' | 'km'
+
+-- ---------------------------------------------------------------------------
+-- Food Tracking additions: meal slot + per-entry notes
+-- ---------------------------------------------------------------------------
+
+alter table food_logs add column if not exists meal_slot text not null default 'other';
+-- meal_slot: 'breakfast' | 'morning_snack' | 'lunch' | 'afternoon_snack'
+--          | 'dinner' | 'evening_snack' | 'other'
+alter table food_logs add column if not exists notes text;
+
+-- ---------------------------------------------------------------------------
+-- Fitness: optional photo per activity
+-- ---------------------------------------------------------------------------
+
+alter table fitness_logs add column if not exists image_url text;
+alter table fitness_logs add column if not exists distance_unit text not null default 'mi'; -- 'mi' | 'km'
+
+-- Storage bucket for activity photos. Public bucket (read is unrestricted)
+-- since this is a single-user app and photo URLs aren't guessable/listed
+-- anywhere public; writes/deletes are still locked to the owning user via
+-- the policies below, keyed off a `<user_id>/...` path prefix.
+insert into storage.buckets (id, name, public)
+values ('activity-images', 'activity-images', true)
+on conflict (id) do nothing;
+
+drop policy if exists "Users can upload their own activity images" on storage.objects;
+create policy "Users can upload their own activity images"
+  on storage.objects for insert to authenticated
+  with check (bucket_id = 'activity-images' and (storage.foldername(name))[1] = auth.uid()::text);
+
+drop policy if exists "Anyone can view activity images" on storage.objects;
+create policy "Anyone can view activity images"
+  on storage.objects for select
+  using (bucket_id = 'activity-images');
+
+drop policy if exists "Users can delete their own activity images" on storage.objects;
+create policy "Users can delete their own activity images"
+  on storage.objects for delete to authenticated
+  using (bucket_id = 'activity-images' and (storage.foldername(name))[1] = auth.uid()::text);
+
+-- ---------------------------------------------------------------------------
+-- Extras: free-form daily notes + user-defined custom trackers
+-- ---------------------------------------------------------------------------
+-- extra_types is a user-defined "category" of thing to track (e.g. "Mood",
+-- "Migraines", "Reading") with an emoji that then shows up on the Home
+-- calendar for any day with a logged entry of that type — same visual
+-- pattern as the built-in fitness/food emoji, just user-extensible.
+
+create table if not exists day_notes (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users (id) on delete cascade,
+  date date not null default current_date,
+  notes text not null,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists day_notes_user_date_idx on day_notes (user_id, date desc);
+
+create table if not exists extra_types (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users (id) on delete cascade,
+  name text not null,
+  emoji text not null default '\u2b50',
+  created_at timestamptz not null default now()
+);
+
+create table if not exists extra_records (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users (id) on delete cascade,
+  type_id uuid not null references extra_types (id) on delete cascade,
+  date date not null default current_date,
+  name text not null,
+  notes text,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists extra_records_user_date_idx on extra_records (user_id, date desc);
+create index if not exists extra_records_user_type_idx on extra_records (user_id, type_id, date desc);
+
+alter table day_notes enable row level security;
+alter table extra_types enable row level security;
+alter table extra_records enable row level security;
+
+drop policy if exists "Users manage their own day notes" on day_notes;
+create policy "Users manage their own day notes"
+  on day_notes for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+drop policy if exists "Users manage their own extra types" on extra_types;
+create policy "Users manage their own extra types"
+  on extra_types for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+drop policy if exists "Users manage their own extra records" on extra_records;
+create policy "Users manage their own extra records"
+  on extra_records for all using (auth.uid() = user_id) with check (auth.uid() = user_id);

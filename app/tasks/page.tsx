@@ -53,7 +53,7 @@ function NewTaskForm({ onCreate }: { onCreate: (input: Parameters<typeof createT
     return (
       <button
         onClick={() => setOpen(true)}
-        className="w-full rounded-xl border border-dashed border-[#D1D5DB] text-[#6B7280] text-sm py-3 hover:border-[#4C6EF5] hover:text-[#4C6EF5] transition-colors"
+        className="w-full rounded-xl border border-dashed border-[#D1D5DB] text-[#6B7280] text-sm py-3 hover:border-[#0D9488] hover:text-[#0D9488] transition-colors"
       >
         + Add a task
       </button>
@@ -67,14 +67,14 @@ function NewTaskForm({ onCreate }: { onCreate: (input: Parameters<typeof createT
         value={title}
         onChange={(e) => setTitle(e.target.value)}
         placeholder="Task title"
-        className="w-full mb-2 bg-[#F7F8FA] border border-[#E5E7EB] rounded-md px-3 py-2 text-sm text-[#1D2027] focus:outline-none focus:border-[#4C6EF5]"
+        className="w-full mb-2 bg-[#F7F8FA] border border-[#E5E7EB] rounded-md px-3 py-2 text-sm text-[#1D2027] focus:outline-none focus:border-[#0D9488]"
       />
       <textarea
         value={notes}
         onChange={(e) => setNotes(e.target.value)}
         placeholder="Notes (optional)"
         rows={2}
-        className="w-full mb-3 bg-[#F7F8FA] border border-[#E5E7EB] rounded-md px-3 py-2 text-sm text-[#1D2027] focus:outline-none focus:border-[#4C6EF5]"
+        className="w-full mb-3 bg-[#F7F8FA] border border-[#E5E7EB] rounded-md px-3 py-2 text-sm text-[#1D2027] focus:outline-none focus:border-[#0D9488]"
       />
 
       <div className="flex gap-2 mb-3">
@@ -84,7 +84,7 @@ function NewTaskForm({ onCreate }: { onCreate: (input: Parameters<typeof createT
             onClick={() => setRecurrence(r)}
             className={`text-xs px-3 py-1.5 rounded-full border ${
               recurrence === r
-                ? "bg-[#4C6EF5] text-white border-[#4C6EF5]"
+                ? "bg-[#0D9488] text-white border-[#0D9488]"
                 : "border-[#E5E7EB] text-[#6B7280]"
             }`}
           >
@@ -101,7 +101,7 @@ function NewTaskForm({ onCreate }: { onCreate: (input: Parameters<typeof createT
               onClick={() => toggleDay(i)}
               className={`w-9 h-9 rounded-full text-xs border ${
                 days.includes(i)
-                  ? "bg-[#4C6EF5] text-white border-[#4C6EF5]"
+                  ? "bg-[#0D9488] text-white border-[#0D9488]"
                   : "border-[#E5E7EB] text-[#6B7280]"
               }`}
             >
@@ -114,7 +114,7 @@ function NewTaskForm({ onCreate }: { onCreate: (input: Parameters<typeof createT
       <div className="flex gap-2">
         <button
           onClick={submit}
-          className="flex-1 rounded-md bg-[#4C6EF5] text-white text-sm font-medium py-2"
+          className="flex-1 rounded-md bg-[#0D9488] text-white text-sm font-medium py-2"
         >
           Add task
         </button>
@@ -205,11 +205,11 @@ export default function TasksPage() {
             )}
           </div>
           {view === "today" ? (
-            <button onClick={loadArchive} className="text-xs text-[#4C6EF5] font-medium mt-1">
+            <button onClick={loadArchive} className="text-xs text-[#0D9488] font-medium mt-1">
               Archive
             </button>
           ) : (
-            <button onClick={() => setView("today")} className="text-xs text-[#4C6EF5] font-medium mt-1">
+            <button onClick={() => setView("today")} className="text-xs text-[#0D9488] font-medium mt-1">
               Back to today
             </button>
           )}

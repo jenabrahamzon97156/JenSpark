@@ -5,7 +5,9 @@
 import { useEffect, useState } from "react";
 import { FitnessLogEntry } from "@/lib/types";
 import { useAuth } from "@/lib/useAuth";
-import { addSet, deleteSet, fetchLoggedDatesForType, fetchRecentLogsForType, updateSet } from "@/lib/fitnessStore";
+import { addSet, deleteSet, fetchLoggedDatesForType, fetchRecentLogsForType, removeActivityImage, updateSet, uploadActivityImage } from "@/lib/fitnessStore";
+import { fetchSettings } from "@/lib/settingsStore";
+import { dateToString as toDateStr } from "@/lib/workoutStore";
 import RestTimer from "@/components/dashboard/RestTimer";
 
 const WEEK_LABELS = ["S", "M", "T", "W", "T", "F", "S"];
@@ -16,26 +18,32 @@ function startOfWeek(d: Date) {
   copy.setHours(0, 0, 0, 0);
   return copy;
 }
-function toDateStr(d: Date) {
-  return d.toISOString().slice(0, 10);
-}
 
 export default function ActivityCard({
   log,
   onDelete,
   onSetsChanged,
+  onImageChanged,
 }: {
   log: FitnessLogEntry;
   onDelete: () => void;
   onSetsChanged: (sets: NonNullable<FitnessLogEntry["sets"]>) => void;
+  onImageChanged: (imageUrl: string | null) => void;
 }) {
   const { user } = useAuth();
   const [expanded, setExpanded] = useState(true);
   const [showHistory, setShowHistory] = useState(false);
   const [history, setHistory] = useState<FitnessLogEntry[]>([]);
   const [weekDates, setWeekDates] = useState<Set<string>>(new Set());
-  const [restDuration, setRestDuration] = useState(90);
+  const [restDuration, setRestDuration] = useState(60);
   const [resting, setResting] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
+
+  useEffect(() => {
+    if (!user) return;
+    fetchSettings(user.id).then((s) => setRestDuration(s.restTimerDefaultSeconds));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
 
   useEffect(() => {
     if (log.category !== "cardio" || !user) return;
@@ -82,9 +90,10 @@ export default function ActivityCard({
           <p className="text-sm font-medium text-[#1D2027]">{log.typeName}</p>
           <p className="text-xs text-[#6B7280]">
             {log.category === "cardio" &&
-              `${log.distance ?? "\u2014"} dist \u00b7 ${log.durationMinutes ?? "\u2014"} min`}
+              `${log.distance ?? "\u2014"} ${log.distance != null ? log.distanceUnit : ""} \u00b7 ${log.durationMinutes ?? "\u2014"} min`}
             {log.category === "weightlifting" && `${sets.length} sets`}
-            {log.category === "swimming" && `${log.distance ?? "\u2014"} dist \u00b7 ${log.durationMinutes ?? "\u2014"} min`}
+            {log.category === "swimming" &&
+              `${log.distance ?? "\u2014"} ${log.distance != null ? log.distanceUnit : ""} \u00b7 ${log.durationMinutes ?? "\u2014"} min`}
             {(log.category === "yoga" || log.category === "stretching") && `${log.durationMinutes ?? "\u2014"} min`}
           </p>
         </div>
@@ -114,7 +123,7 @@ export default function ActivityCard({
                   <div
                     key={i}
                     className={`flex-1 h-7 rounded-md flex items-center justify-center text-[10px] ${
-                      isLogged ? "bg-[#4C6EF5] text-white" : "bg-[#F1F2F4] text-[#9CA3AF]"
+                      isLogged ? "bg-[#0D9488] text-white" : "bg-[#F1F2F4] text-[#9CA3AF]"
                     }`}
                   >
                     {label}
@@ -159,7 +168,7 @@ export default function ActivityCard({
                   </button>
                 </div>
               ))}
-              <button onClick={addNewSet} className="text-xs text-[#4C6EF5] font-medium mt-1 mb-3">
+              <button onClick={addNewSet} className="text-xs text-[#0D9488] font-medium mt-1 mb-3">
                 + Add set
               </button>
 
@@ -178,7 +187,7 @@ export default function ActivityCard({
                 ))}
                 <button
                   onClick={() => setResting(true)}
-                  className="ml-auto text-xs px-3 py-1 rounded-full bg-[#4C6EF5] text-white"
+                  className="ml-auto text-xs px-3 py-1 rounded-full bg-[#0D9488] text-white"
                 >
                   Start
                 </button>
@@ -193,8 +202,48 @@ export default function ActivityCard({
 
           {log.notes && <p className="text-xs text-[#6B7280] mt-2">{log.notes}</p>}
 
+          <div className="mt-3">
+            {log.imageUrl ? (
+              <div className="relative inline-block">
+                <img
+                  src={log.imageUrl}
+                  alt={`${log.typeName} photo`}
+                  className="max-h-40 rounded-lg border border-[#E5E7EB]"
+                />
+                <button
+                  onClick={async () => {
+                    onImageChanged(null);
+                    await removeActivityImage(log.id);
+                  }}
+                  className="absolute -top-2 -right-2 h-6 w-6 rounded-full bg-white border border-[#E5E7EB] text-[#9CA3AF] hover:text-[#DC2626] text-xs flex items-center justify-center"
+                  aria-label="Remove photo"
+                >
+                  {"\u00d7"}
+                </button>
+              </div>
+            ) : (
+              <label className="inline-flex items-center gap-1.5 text-xs text-[#0D9488] font-medium cursor-pointer">
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  disabled={uploadingImage}
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file || !user) return;
+                    setUploadingImage(true);
+                    const url = await uploadActivityImage(user.id, log.id, file);
+                    setUploadingImage(false);
+                    if (url) onImageChanged(url);
+                  }}
+                />
+                {uploadingImage ? "Uploading..." : "+ Add photo"}
+              </label>
+            )}
+          </div>
+
           {!showHistory ? (
-            <button onClick={loadHistory} className="text-xs text-[#4C6EF5] font-medium mt-3">
+            <button onClick={loadHistory} className="text-xs text-[#0D9488] font-medium mt-3">
               Show history for {log.typeName}
             </button>
           ) : (
@@ -211,7 +260,7 @@ export default function ActivityCard({
                       {h.category === "weightlifting"
                         ? (h.sets ?? []).map((s) => `${s.weight ?? "-"}\u00d7${s.reps ?? "-"}`).join(", ")
                         : h.category === "cardio" || h.category === "swimming"
-                        ? `${h.distance ?? "\u2014"} / ${h.durationMinutes ?? "\u2014"}min`
+                        ? `${h.distance ?? "\u2014"}${h.distance != null ? h.distanceUnit : ""} / ${h.durationMinutes ?? "\u2014"}min`
                         : `${h.durationMinutes ?? "\u2014"}min`}
                     </span>
                   </div>

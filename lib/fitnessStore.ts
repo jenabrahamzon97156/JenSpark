@@ -26,11 +26,13 @@ function rowToLog(row: any): FitnessLogEntry {
     category: row.category,
     typeName: row.type_name,
     distance: row.distance != null ? Number(row.distance) : null,
+    distanceUnit: row.distance_unit ?? "mi",
     durationMinutes: row.duration_minutes != null ? Number(row.duration_minutes) : null,
     seatNumber: row.seat_number,
     machineSettings: row.machine_settings,
     notes: row.notes,
     workoutId: row.workout_id,
+    imageUrl: row.image_url,
   };
 }
 
@@ -83,11 +85,13 @@ export async function createLog(
       category: input.category,
       type_name: input.typeName,
       distance: input.distance,
+      distance_unit: input.distanceUnit,
       duration_minutes: input.durationMinutes,
       seat_number: input.seatNumber,
       machine_settings: input.machineSettings,
       notes: input.notes,
       workout_id: input.workoutId,
+      image_url: input.imageUrl,
     })
     .select()
     .single();
@@ -96,6 +100,44 @@ export async function createLog(
     return null;
   }
   return { ...rowToLog(data), sets: [] };
+}
+
+// Photo -----------------------------------------------------------------------
+
+export async function uploadActivityImage(
+  userId: string,
+  logId: string,
+  file: File
+): Promise<string | null> {
+  const ext = file.name.split(".").pop() || "jpg";
+  const path = `${userId}/${logId}-${Date.now()}.${ext}`;
+
+  const { error: uploadError } = await supabase.storage.from("activity-images").upload(path, file, {
+    upsert: true,
+  });
+  if (uploadError) {
+    console.error("Failed to upload image:", uploadError.message);
+    return null;
+  }
+
+  const { data } = supabase.storage.from("activity-images").getPublicUrl(path);
+  const url = data.publicUrl;
+
+  const { error: updateError } = await supabase
+    .from("fitness_logs")
+    .update({ image_url: url })
+    .eq("id", logId);
+  if (updateError) {
+    console.error("Failed to save image URL:", updateError.message);
+    return null;
+  }
+
+  return url;
+}
+
+export async function removeActivityImage(logId: string) {
+  const { error } = await supabase.from("fitness_logs").update({ image_url: null }).eq("id", logId);
+  if (error) console.error("Failed to remove image:", error.message);
 }
 
 export async function deleteLog(id: string) {
@@ -295,11 +337,13 @@ export async function logWorkoutForDate(
       category: item.category,
       typeName: item.typeName,
       distance: null,
+      distanceUnit: "mi",
       durationMinutes: null,
       seatNumber: null,
       machineSettings: null,
       notes: null,
       workoutId: workout.id,
+      imageUrl: null,
     });
     if (log) created.push(log);
   }

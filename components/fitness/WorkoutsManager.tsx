@@ -51,7 +51,7 @@ export default function WorkoutsManager({
         placeholder="Workout name, e.g. 'Day 1: Full Body'"
         value={name}
         onChange={(e) => setName(e.target.value)}
-        className="w-full mb-2 bg-[#F7F8FA] border border-[#E5E7EB] rounded-md px-3 py-2 text-sm text-[#1D2027] focus:outline-none focus:border-[#4C6EF5]"
+        className="w-full mb-2 bg-[#F7F8FA] border border-[#E5E7EB] rounded-md px-3 py-2 text-sm text-[#1D2027] focus:outline-none focus:border-[#0D9488]"
       />
 
       <div className="flex gap-1.5 mb-2 overflow-x-auto">
@@ -63,7 +63,7 @@ export default function WorkoutsManager({
               setTypeName(DEFAULT_TYPES[c][0]);
             }}
             className={`shrink-0 text-xs px-2.5 py-1 rounded-full border ${
-              category === c ? "bg-[#4C6EF5] text-white border-[#4C6EF5]" : "border-[#E5E7EB] text-[#6B7280]"
+              category === c ? "bg-[#0D9488] text-white border-[#0D9488]" : "border-[#E5E7EB] text-[#6B7280]"
             }`}
           >
             {CATEGORY_LABELS[c]}
@@ -106,7 +106,7 @@ export default function WorkoutsManager({
         </div>
       )}
 
-      <button onClick={save} className="w-full rounded-md bg-[#4C6EF5] text-white text-sm font-medium py-2 mb-4">
+      <button onClick={save} className="w-full rounded-md bg-[#0D9488] text-white text-sm font-medium py-2 mb-4">
         Save workout
       </button>
 
@@ -123,7 +123,7 @@ export default function WorkoutsManager({
                 <div className="flex gap-2">
                   <button
                     onClick={() => onLog(w)}
-                    className="text-xs px-3 py-1 rounded-full bg-[#4C6EF5] text-white"
+                    className="text-xs px-3 py-1 rounded-full bg-[#0D9488] text-white"
                   >
                     Log today
                   </button>

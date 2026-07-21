@@ -141,6 +141,15 @@ export interface RecipeWithIngredients {
   ingredients: { foodId: string; quantity: number; food: FoodItem }[];
 }
 
+export type MealSlot =
+  | "breakfast"
+  | "morning_snack"
+  | "lunch"
+  | "afternoon_snack"
+  | "dinner"
+  | "evening_snack"
+  | "other";
+
 export interface FoodLogEntry extends NutritionFacts {
   id: string;
   date: string;
@@ -148,6 +157,8 @@ export interface FoodLogEntry extends NutritionFacts {
   quantity: number;
   sourceType: "food" | "meal" | "recipe";
   sourceId: string | null;
+  mealSlot: MealSlot;
+  notes: string | null;
 }
 
 export interface NutritionGoals {
@@ -169,17 +180,21 @@ export interface FitnessSet {
   reps: number | null;
 }
 
+export type DistanceUnit = "mi" | "km";
+
 export interface FitnessLogEntry {
   id: string;
   date: string;
   category: FitnessCategory;
   typeName: string;
   distance: number | null;
+  distanceUnit: DistanceUnit;
   durationMinutes: number | null;
   seatNumber: string | null;
   machineSettings: string | null;
   notes: string | null;
   workoutId: string | null;
+  imageUrl: string | null;
   sets?: FitnessSet[];
 }
 
@@ -193,4 +208,38 @@ export interface WorkoutTemplate {
   id: string;
   name: string;
   items: WorkoutTemplateItem[];
+}
+
+// ---------------------------------------------------------------------------
+// Settings
+// ---------------------------------------------------------------------------
+
+export interface UserSettings {
+  statsReminderFrequency: ReminderFrequency;
+  restTimerDefaultSeconds: number;
+  distanceUnitDefault: DistanceUnit;
+}
+
+// ---------------------------------------------------------------------------
+// Extras
+// ---------------------------------------------------------------------------
+
+export interface DayNote {
+  id: string;
+  date: string;
+  notes: string;
+}
+
+export interface ExtraType {
+  id: string;
+  name: string;
+  emoji: string;
+}
+
+export interface ExtraRecord {
+  id: string;
+  typeId: string;
+  date: string;
+  name: string;
+  notes: string | null;
 }

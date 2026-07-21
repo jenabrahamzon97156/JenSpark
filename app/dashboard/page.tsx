@@ -13,7 +13,7 @@ import LogActivityPanel, { LogActivityInput } from "@/components/fitness/LogActi
 import WorkoutsManager from "@/components/fitness/WorkoutsManager";
 import { useAuth } from "@/lib/useAuth";
 import { supabase } from "@/lib/supabaseClient";
-import { FitnessLogEntry, FitnessSet, WorkoutTemplate } from "@/lib/types";
+import { DistanceUnit, FitnessLogEntry, FitnessSet, WorkoutTemplate } from "@/lib/types";
 import { dateToString, todayDateString } from "@/lib/workoutStore";
 import {
   createLog,
@@ -24,6 +24,7 @@ import {
   fetchWorkouts,
   logWorkoutForDate,
 } from "@/lib/fitnessStore";
+import { fetchSettings, saveSettings } from "@/lib/settingsStore";
 
 export default function FitnessPage() {
   const { user } = useAuth();
@@ -33,17 +34,24 @@ export default function FitnessPage() {
   const [loading, setLoading] = useState(true);
   const [showLogPanel, setShowLogPanel] = useState(false);
   const [showWorkouts, setShowWorkouts] = useState(false);
+  const [showRestSettings, setShowRestSettings] = useState(false);
+  const [restDefault, setRestDefault] = useState(60);
+  const [distanceUnitDefault, setDistanceUnitDefault] = useState<DistanceUnit>("mi");
 
   const isToday = date === todayDateString();
 
   useEffect(() => {
     if (!user) return;
     setLoading(true);
-    Promise.all([fetchLogsForDate(user.id, date), fetchWorkouts(user.id)]).then(([l, w]) => {
-      setLogs(l);
-      setWorkouts(w);
-      setLoading(false);
-    });
+    Promise.all([fetchLogsForDate(user.id, date), fetchWorkouts(user.id), fetchSettings(user.id)]).then(
+      ([l, w, s]) => {
+        setLogs(l);
+        setWorkouts(w);
+        setRestDefault(s.restTimerDefaultSeconds);
+        setDistanceUnitDefault(s.distanceUnitDefault);
+        setLoading(false);
+      }
+    );
   }, [user, date]);
 
   const shiftDate = (delta: number) => {
@@ -54,7 +62,7 @@ export default function FitnessPage() {
 
   const handleLog = async (input: LogActivityInput) => {
     if (!user) return;
-    const created = await createLog(user.id, { date, workoutId: null, ...input });
+    const created = await createLog(user.id, { date, workoutId: null, imageUrl: null, ...input });
     if (!created) return;
     // Weightlifting entries start with one empty set ready to fill in.
     if (created.category === "weightlifting") {
@@ -85,10 +93,87 @@ export default function FitnessPage() {
       <div className="max-w-2xl mx-auto px-4 py-8">
         <header className="mb-4 flex items-center justify-between">
           <h1 className="text-2xl font-semibold tracking-tight text-[#1D2027]">Fitness</h1>
-          <button onClick={() => supabase.auth.signOut()} className="text-xs text-[#6B7280] hover:text-[#1D2027]">
-            Sign out
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setShowRestSettings((s) => !s)}
+              className="text-xs text-[#0D9488] font-medium"
+            >
+              Settings
+            </button>
+            <button onClick={() => supabase.auth.signOut()} className="text-xs text-[#6B7280] hover:text-[#1D2027]">
+              Sign out
+            </button>
+          </div>
         </header>
+
+        {showRestSettings && (
+          <div className="rounded-xl border border-[#0D9488] bg-[#0D9488]/5 p-4 mb-4">
+            <p className="text-sm font-medium text-[#1D2027] mb-1">Default rest time</p>
+            <p className="text-xs text-[#6B7280] mb-3">
+              Used whenever you start a rest timer. You can still adjust it per set.
+            </p>
+            <div className="flex flex-wrap items-center gap-2 mb-4">
+              {[30, 60, 90, 120].map((sec) => (
+                <button
+                  key={sec}
+                  onClick={() => setRestDefault(sec)}
+                  className={`text-xs px-3 py-1.5 rounded-full border ${
+                    restDefault === sec
+                      ? "bg-[#1D2027] text-white border-[#1D2027]"
+                      : "border-[#E5E7EB] text-[#6B7280]"
+                  }`}
+                >
+                  {sec < 60 ? `${sec}s` : sec === 90 ? "1.5 min" : `${sec / 60} min`}
+                </button>
+              ))}
+              <button
+                onClick={() => setRestDefault((d) => Math.max(15, d - 15))}
+                className="text-xs px-2.5 py-1.5 rounded-full border border-[#E5E7EB] text-[#6B7280]"
+              >
+                -15s
+              </button>
+              <button
+                onClick={() => setRestDefault((d) => d + 15)}
+                className="text-xs px-2.5 py-1.5 rounded-full border border-[#E5E7EB] text-[#6B7280]"
+              >
+                +15s
+              </button>
+              <span className="text-xs font-mono text-[#1D2027] ml-1">{restDefault}s</span>
+            </div>
+
+            <p className="text-sm font-medium text-[#1D2027] mb-1">Default distance unit</p>
+            <p className="text-xs text-[#6B7280] mb-2">Used for cardio and swimming. Overridable per entry.</p>
+            <div className="flex gap-2 mb-3">
+              {(["mi", "km"] as DistanceUnit[]).map((u) => (
+                <button
+                  key={u}
+                  onClick={() => setDistanceUnitDefault(u)}
+                  className={`text-xs px-4 py-1.5 rounded-full border ${
+                    distanceUnitDefault === u
+                      ? "bg-[#1D2027] text-white border-[#1D2027]"
+                      : "border-[#E5E7EB] text-[#6B7280]"
+                  }`}
+                >
+                  {u === "mi" ? "Miles" : "Kilometers"}
+                </button>
+              ))}
+            </div>
+
+            <button
+              onClick={async () => {
+                if (!user) return;
+                await saveSettings(user.id, {
+                  restTimerDefaultSeconds: restDefault,
+                  distanceUnitDefault,
+                });
+                setShowRestSettings(false);
+              }}
+              className="mt-1 rounded-md bg-[#0D9488] text-white text-sm font-medium py-2 px-4"
+            >
+              Save
+            </button>
+          </div>
+        )}
 
         <div className="flex items-center justify-between mb-4">
           <button onClick={() => shiftDate(-1)} className="text-[#6B7280] px-2 py-1">
@@ -128,6 +213,9 @@ export default function FitnessPage() {
                     onSetsChanged={(sets: FitnessSet[]) =>
                       setLogs((prev) => prev.map((l) => (l.id === log.id ? { ...l, sets } : l)))
                     }
+                    onImageChanged={(imageUrl: string | null) =>
+                      setLogs((prev) => prev.map((l) => (l.id === log.id ? { ...l, imageUrl } : l)))
+                    }
                   />
                 ))}
               </div>
@@ -141,7 +229,7 @@ export default function FitnessPage() {
               setShowLogPanel((s) => !s);
               setShowWorkouts(false);
             }}
-            className="flex-1 rounded-md bg-[#4C6EF5] text-white text-sm font-medium py-2.5"
+            className="flex-1 rounded-md bg-[#0D9488] text-white text-sm font-medium py-2.5"
           >
             + Log activity
           </button>

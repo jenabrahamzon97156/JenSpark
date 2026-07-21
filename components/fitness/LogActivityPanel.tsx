@@ -3,8 +3,9 @@
 // components/fitness/LogActivityPanel.tsx
 
 import { useEffect, useState } from "react";
-import { FitnessCategory } from "@/lib/types";
+import { DistanceUnit, FitnessCategory } from "@/lib/types";
 import { CATEGORY_LABELS, DEFAULT_TYPES, fetchCustomTypeNames, fetchLastSettingsForType } from "@/lib/fitnessStore";
+import { fetchSettings } from "@/lib/settingsStore";
 import { useAuth } from "@/lib/useAuth";
 
 const CATEGORIES: FitnessCategory[] = ["cardio", "weightlifting", "yoga", "swimming", "stretching"];
@@ -13,6 +14,7 @@ export interface LogActivityInput {
   category: FitnessCategory;
   typeName: string;
   distance: number | null;
+  distanceUnit: DistanceUnit;
   durationMinutes: number | null;
   seatNumber: string | null;
   machineSettings: string | null;
@@ -34,10 +36,17 @@ export default function LogActivityPanel({
   const [newType, setNewType] = useState("");
 
   const [distance, setDistance] = useState("");
+  const [distanceUnit, setDistanceUnit] = useState<DistanceUnit>("mi");
   const [durationMinutes, setDurationMinutes] = useState("");
   const [seatNumber, setSeatNumber] = useState("");
   const [machineSettings, setMachineSettings] = useState("");
   const [notes, setNotes] = useState("");
+
+  useEffect(() => {
+    if (!user) return;
+    fetchSettings(user.id).then((s) => setDistanceUnit(s.distanceUnitDefault));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
 
   useEffect(() => {
     if (!user) return;
@@ -71,6 +80,7 @@ export default function LogActivityPanel({
       category,
       typeName,
       distance: category === "cardio" || category === "swimming" ? Number(distance) || null : null,
+      distanceUnit,
       durationMinutes: category !== "weightlifting" ? Number(durationMinutes) || null : null,
       seatNumber: category === "weightlifting" ? seatNumber || null : null,
       machineSettings: category === "weightlifting" ? machineSettings || null : null,
@@ -93,7 +103,7 @@ export default function LogActivityPanel({
             key={c}
             onClick={() => setCategory(c)}
             className={`shrink-0 text-xs px-3 py-1.5 rounded-full border ${
-              category === c ? "bg-[#4C6EF5] text-white border-[#4C6EF5]" : "border-[#E5E7EB] text-[#6B7280]"
+              category === c ? "bg-[#0D9488] text-white border-[#0D9488]" : "border-[#E5E7EB] text-[#6B7280]"
             }`}
           >
             {CATEGORY_LABELS[c]}
@@ -144,19 +154,33 @@ export default function LogActivityPanel({
       <div className="flex flex-col gap-2 mb-3">
         {(category === "cardio" || category === "swimming") && (
           <div className="grid grid-cols-2 gap-2">
-            <input
-              placeholder="Distance"
-              type="number"
-              value={distance}
-              onChange={(e) => setDistance(e.target.value)}
-              className="bg-[#F7F8FA] border border-[#E5E7EB] rounded-md px-3 py-2 text-sm text-[#1D2027] focus:outline-none focus:border-[#4C6EF5]"
-            />
+            <div className="flex gap-1">
+              <input
+                placeholder="Distance"
+                type="number"
+                value={distance}
+                onChange={(e) => setDistance(e.target.value)}
+                className="flex-1 min-w-0 bg-[#F7F8FA] border border-[#E5E7EB] rounded-md px-3 py-2 text-sm text-[#1D2027] focus:outline-none focus:border-[#0D9488]"
+              />
+              {(["mi", "km"] as DistanceUnit[]).map((u) => (
+                <button
+                  key={u}
+                  type="button"
+                  onClick={() => setDistanceUnit(u)}
+                  className={`px-2.5 rounded-md border text-xs ${
+                    distanceUnit === u ? "bg-[#1D2027] text-white border-[#1D2027]" : "border-[#E5E7EB] text-[#6B7280]"
+                  }`}
+                >
+                  {u}
+                </button>
+              ))}
+            </div>
             <input
               placeholder="Total time (min)"
               type="number"
               value={durationMinutes}
               onChange={(e) => setDurationMinutes(e.target.value)}
-              className="bg-[#F7F8FA] border border-[#E5E7EB] rounded-md px-3 py-2 text-sm text-[#1D2027] focus:outline-none focus:border-[#4C6EF5]"
+              className="bg-[#F7F8FA] border border-[#E5E7EB] rounded-md px-3 py-2 text-sm text-[#1D2027] focus:outline-none focus:border-[#0D9488]"
             />
           </div>
         )}
@@ -166,7 +190,7 @@ export default function LogActivityPanel({
             type="number"
             value={durationMinutes}
             onChange={(e) => setDurationMinutes(e.target.value)}
-            className="bg-[#F7F8FA] border border-[#E5E7EB] rounded-md px-3 py-2 text-sm text-[#1D2027] focus:outline-none focus:border-[#4C6EF5]"
+            className="bg-[#F7F8FA] border border-[#E5E7EB] rounded-md px-3 py-2 text-sm text-[#1D2027] focus:outline-none focus:border-[#0D9488]"
           />
         )}
         {category === "weightlifting" && (
@@ -175,13 +199,13 @@ export default function LogActivityPanel({
               placeholder="Seat number"
               value={seatNumber}
               onChange={(e) => setSeatNumber(e.target.value)}
-              className="bg-[#F7F8FA] border border-[#E5E7EB] rounded-md px-3 py-2 text-sm text-[#1D2027] focus:outline-none focus:border-[#4C6EF5]"
+              className="bg-[#F7F8FA] border border-[#E5E7EB] rounded-md px-3 py-2 text-sm text-[#1D2027] focus:outline-none focus:border-[#0D9488]"
             />
             <input
               placeholder="Other machine settings"
               value={machineSettings}
               onChange={(e) => setMachineSettings(e.target.value)}
-              className="bg-[#F7F8FA] border border-[#E5E7EB] rounded-md px-3 py-2 text-sm text-[#1D2027] focus:outline-none focus:border-[#4C6EF5]"
+              className="bg-[#F7F8FA] border border-[#E5E7EB] rounded-md px-3 py-2 text-sm text-[#1D2027] focus:outline-none focus:border-[#0D9488]"
             />
           </div>
         )}
@@ -190,11 +214,11 @@ export default function LogActivityPanel({
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
           rows={2}
-          className="bg-[#F7F8FA] border border-[#E5E7EB] rounded-md px-3 py-2 text-sm text-[#1D2027] focus:outline-none focus:border-[#4C6EF5]"
+          className="bg-[#F7F8FA] border border-[#E5E7EB] rounded-md px-3 py-2 text-sm text-[#1D2027] focus:outline-none focus:border-[#0D9488]"
         />
       </div>
 
-      <button onClick={submit} className="w-full rounded-md bg-[#4C6EF5] text-white text-sm font-medium py-2">
+      <button onClick={submit} className="w-full rounded-md bg-[#0D9488] text-white text-sm font-medium py-2">
         {category === "weightlifting" ? "Add exercise" : "Log activity"}
       </button>
     </div>

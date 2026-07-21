@@ -11,6 +11,37 @@ import { useEffect, useRef, useState } from "react";
 const RADIUS = 26;
 const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
 
+// Short two-tone ding via the Web Audio API — no audio file to host, and it
+// works offline. Vibration only actually does anything on Android Chrome;
+// iOS Safari doesn't implement the Vibration API at all, so on iPhone this
+// call is silently a no-op and the sound is what actually gets noticed.
+function playCompletionAlert() {
+  try {
+    const Ctx = window.AudioContext || (window as any).webkitAudioContext;
+    const ctx = new Ctx();
+    const now = ctx.currentTime;
+    [880, 1175].forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.frequency.value = freq;
+      osc.type = "sine";
+      gain.gain.setValueAtTime(0.001, now + i * 0.18);
+      gain.gain.exponentialRampToValueAtTime(0.3, now + i * 0.18 + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.18 + 0.3);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(now + i * 0.18);
+      osc.stop(now + i * 0.18 + 0.3);
+    });
+  } catch {
+    // Audio can fail to init in some contexts (e.g. autoplay policy edge
+    // cases) — the visual "0:00" state still communicates completion.
+  }
+
+  if (typeof navigator !== "undefined" && "vibrate" in navigator) {
+    navigator.vibrate?.([200, 100, 200]);
+  }
+}
+
 export default function RestTimer({
   durationSeconds,
   onComplete,
@@ -26,6 +57,7 @@ export default function RestTimer({
       setSecondsLeft((s) => {
         if (s <= 1) {
           if (intervalRef.current) clearInterval(intervalRef.current);
+          playCompletionAlert();
           onComplete();
           return 0;
         }
@@ -65,7 +97,7 @@ export default function RestTimer({
           cy="30"
           r={RADIUS}
           fill="none"
-          stroke="#4C6EF5"
+          stroke="#0D9488"
           strokeWidth="4"
           strokeLinecap="round"
           strokeDasharray={CIRCUMFERENCE}
@@ -88,6 +120,12 @@ export default function RestTimer({
       <div className="flex flex-col gap-1">
         <span className="text-xs text-[#6B7280]">Resting before next set</span>
         <div className="flex gap-2">
+          <button
+            onClick={() => addTime(-15)}
+            className="text-xs px-2 py-1 rounded border border-[#E5E7EB] text-[#1D2027] hover:bg-[#F1F2F4]"
+          >
+            -15s
+          </button>
           <button
             onClick={() => addTime(15)}
             className="text-xs px-2 py-1 rounded border border-[#E5E7EB] text-[#1D2027] hover:bg-[#F1F2F4]"
