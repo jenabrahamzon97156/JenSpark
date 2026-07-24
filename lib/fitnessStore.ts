@@ -5,7 +5,7 @@ import { FitnessCategory, FitnessLogEntry, FitnessSet, WorkoutTemplate } from ".
 
 export const DEFAULT_TYPES: Record<FitnessCategory, string[]> = {
   cardio: ["Walking", "Running", "Zumba", "Cycling", "Elliptical"],
-  weightlifting: ["Bench Press", "Squat", "Leg Press", "Pec Fly", "Lat Pulldown", "Bicep Curl"],
+  weightlifting: [],
   yoga: ["Yoga"],
   swimming: ["Swimming"],
   stretching: ["Hamstring Stretch", "Hip Flexor Stretch", "Shoulder Stretch", "Full Body Stretch"],
@@ -29,10 +29,13 @@ function rowToLog(row: any): FitnessLogEntry {
     distanceUnit: row.distance_unit ?? "mi",
     durationMinutes: row.duration_minutes != null ? Number(row.duration_minutes) : null,
     seatNumber: row.seat_number,
-    machineSettings: row.machine_settings,
+    settingTwo: row.setting_2,
+    settingThree: row.setting_3,
     notes: row.notes,
     workoutId: row.workout_id,
     imageUrl: row.image_url,
+    exerciseTypeId: row.exercise_type_id,
+    caloriesBurned: row.calories_burned != null ? Number(row.calories_burned) : null,
   };
 }
 
@@ -42,6 +45,7 @@ function rowToSet(row: any): FitnessSet {
     setNumber: row.set_number,
     weight: row.weight != null ? Number(row.weight) : null,
     reps: row.reps != null ? Number(row.reps) : null,
+    completed: !!row.completed,
   };
 }
 
@@ -88,10 +92,13 @@ export async function createLog(
       distance_unit: input.distanceUnit,
       duration_minutes: input.durationMinutes,
       seat_number: input.seatNumber,
-      machine_settings: input.machineSettings,
+      setting_2: input.settingTwo,
+      setting_3: input.settingThree,
       notes: input.notes,
       workout_id: input.workoutId,
       image_url: input.imageUrl,
+      exercise_type_id: input.exerciseTypeId,
+      calories_burned: input.caloriesBurned,
     })
     .select()
     .single();
@@ -100,6 +107,26 @@ export async function createLog(
     return null;
   }
   return { ...rowToLog(data), sets: [] };
+}
+
+export async function updateLogFields(
+  logId: string,
+  patch: Partial<{
+    seatNumber: string | null;
+    settingTwo: string | null;
+    settingThree: string | null;
+    notes: string | null;
+    caloriesBurned: number | null;
+  }>
+) {
+  const dbPatch: Record<string, any> = {};
+  if ("seatNumber" in patch) dbPatch.seat_number = patch.seatNumber;
+  if ("settingTwo" in patch) dbPatch.setting_2 = patch.settingTwo;
+  if ("settingThree" in patch) dbPatch.setting_3 = patch.settingThree;
+  if ("notes" in patch) dbPatch.notes = patch.notes;
+  if ("caloriesBurned" in patch) dbPatch.calories_burned = patch.caloriesBurned;
+  const { error } = await supabase.from("fitness_logs").update(dbPatch).eq("id", logId);
+  if (error) console.error("Failed to update activity:", error.message);
 }
 
 // Photo -----------------------------------------------------------------------
@@ -166,14 +193,54 @@ export async function addSet(
   return rowToSet(data);
 }
 
-export async function updateSet(id: string, weight: number | null, reps: number | null) {
-  const { error } = await supabase.from("fitness_sets").update({ weight, reps }).eq("id", id);
+export async function updateSet(
+  id: string,
+  patch: Partial<{ weight: number | null; reps: number | null; completed: boolean }>
+) {
+  const { error } = await supabase.from("fitness_sets").update(patch).eq("id", id);
   if (error) console.error("Failed to update set:", error.message);
 }
 
 export async function deleteSet(id: string) {
   const { error } = await supabase.from("fitness_sets").delete().eq("id", id);
   if (error) console.error("Failed to delete set:", error.message);
+}
+
+// Default new weightlifting log entries to 3 sets, pre-filled with the
+// weight/reps from the most recent previous session of the same exercise
+// (all three rows get that same last-known weight/reps as a starting point).
+export async function createDefaultSets(
+  userId: string,
+  logId: string,
+  typeName: string
+): Promise<FitnessSet[]> {
+  const last = await fetchLastSetsForType(userId, typeName);
+  const created: FitnessSet[] = [];
+  for (let i = 0; i < 3; i++) {
+    const prior = last[i] ?? last[last.length - 1] ?? null;
+    const s = await addSet(userId, logId, i + 1, prior?.weight ?? null, prior?.reps ?? null);
+    if (s) created.push(s);
+  }
+  return created;
+}
+
+async function fetchLastSetsForType(userId: string, typeName: string): Promise<FitnessSet[]> {
+  const { data: lastLog } = await supabase
+    .from("fitness_logs")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("category", "weightlifting")
+    .eq("type_name", typeName)
+    .order("date", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (!lastLog) return [];
+  const { data: sets } = await supabase
+    .from("fitness_sets")
+    .select("*")
+    .eq("fitness_log_id", lastLog.id)
+    .order("set_number", { ascending: true });
+  return (sets ?? []).map(rowToSet);
 }
 
 // Types & history --------------------------------------------------------------
@@ -186,25 +253,6 @@ export async function fetchCustomTypeNames(userId: string, category: FitnessCate
     .eq("category", category);
   if (error) return [];
   return Array.from(new Set((data ?? []).map((r: any) => r.type_name as string)));
-}
-
-// Previous machine settings for a weightlifting type, so the form can
-// pre-fill seat number / notes from last time.
-export async function fetchLastSettingsForType(
-  userId: string,
-  typeName: string
-): Promise<{ seatNumber: string | null; machineSettings: string | null } | null> {
-  const { data, error } = await supabase
-    .from("fitness_logs")
-    .select("seat_number, machine_settings")
-    .eq("user_id", userId)
-    .eq("category", "weightlifting")
-    .eq("type_name", typeName)
-    .order("date", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (error || !data) return null;
-  return { seatNumber: data.seat_number, machineSettings: data.machine_settings };
 }
 
 export async function fetchRecentLogsForType(
@@ -340,12 +388,20 @@ export async function logWorkoutForDate(
       distanceUnit: "mi",
       durationMinutes: null,
       seatNumber: null,
-      machineSettings: null,
+      settingTwo: null,
+      settingThree: null,
       notes: null,
       workoutId: workout.id,
       imageUrl: null,
+      exerciseTypeId: null,
+      caloriesBurned: null,
     });
-    if (log) created.push(log);
+    if (log) {
+      if (item.category === "weightlifting") {
+        log.sets = await createDefaultSets(userId, log.id, item.typeName);
+      }
+      created.push(log);
+    }
   }
   return created;
 }

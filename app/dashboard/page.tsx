@@ -16,6 +16,7 @@ import { supabase } from "@/lib/supabaseClient";
 import { DistanceUnit, FitnessLogEntry, FitnessSet, WorkoutTemplate } from "@/lib/types";
 import { dateToString, todayDateString } from "@/lib/workoutStore";
 import {
+  createDefaultSets,
   createLog,
   createWorkout,
   deleteLog,
@@ -64,11 +65,10 @@ export default function FitnessPage() {
     if (!user) return;
     const created = await createLog(user.id, { date, workoutId: null, imageUrl: null, ...input });
     if (!created) return;
-    // Weightlifting entries start with one empty set ready to fill in.
+    // Weightlifting entries default to 3 sets, pre-filled from last time
+    // this exercise was logged.
     if (created.category === "weightlifting") {
-      const { addSet } = await import("@/lib/fitnessStore");
-      const set = await addSet(user.id, created.id, 1, null, null);
-      created.sets = set ? [set] : [];
+      created.sets = await createDefaultSets(user.id, created.id, created.typeName);
     }
     setLogs((prev) => [...prev, created]);
     setShowLogPanel(false);
@@ -215,6 +215,9 @@ export default function FitnessPage() {
                     }
                     onImageChanged={(imageUrl: string | null) =>
                       setLogs((prev) => prev.map((l) => (l.id === log.id ? { ...l, imageUrl } : l)))
+                    }
+                    onFieldsChanged={(patch) =>
+                      setLogs((prev) => prev.map((l) => (l.id === log.id ? { ...l, ...patch } : l)))
                     }
                   />
                 ))}

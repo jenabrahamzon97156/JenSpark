@@ -131,21 +131,21 @@ export default function HomePage() {
             <div className="grid grid-cols-3 gap-3 mb-6">
               <div className="rounded-xl border border-[#E5E7EB] bg-white p-4">
                 <p className="text-xs text-[#6B7280] mb-1">Tasks</p>
-                <p className="text-xl font-mono text-[#1D2027]">
+                <p className="text-xl tabular-nums text-[#1D2027]">
                   {completedToday}/{tasksToday.length}
                 </p>
                 <p className="text-[11px] text-[#9CA3AF] mt-0.5">done today</p>
               </div>
               <div className="rounded-xl border border-[#E5E7EB] bg-white p-4">
                 <p className="text-xs text-[#6B7280] mb-1">Fitness</p>
-                <p className="text-xl font-mono text-[#1D2027]">{fitnessLoggedToday ? "\u2713" : "\u2014"}</p>
+                <p className="text-xl tabular-nums text-[#1D2027]">{fitnessLoggedToday ? "\u2713" : "\u2014"}</p>
                 <p className="text-[11px] text-[#9CA3AF] mt-0.5">
                   {fitnessLoggedToday ? "logged today" : "not yet today"}
                 </p>
               </div>
               <div className="rounded-xl border border-[#E5E7EB] bg-white p-4">
                 <p className="text-xs text-[#6B7280] mb-1">Weight</p>
-                <p className="text-xl font-mono text-[#1D2027]">
+                <p className="text-xl tabular-nums text-[#1D2027]">
                   {latestWeight != null ? latestWeight : "\u2014"}
                 </p>
                 <p className="text-[11px] text-[#9CA3AF] mt-0.5">
@@ -157,7 +157,7 @@ export default function HomePage() {
             <div className="rounded-xl border border-[#E5E7EB] bg-white p-4 mb-6">
               <p className="text-sm font-medium text-[#1D2027] mb-1">This week</p>
               <p className="text-sm text-[#6B7280]">
-                Fitness logged on <span className="font-mono text-[#1D2027]">{weekFitnessDays}</span> day
+                Fitness logged on <span className="tabular-nums text-[#1D2027]">{weekFitnessDays}</span> day
                 {weekFitnessDays === 1 ? "" : "s"} so far.
               </p>
             </div>

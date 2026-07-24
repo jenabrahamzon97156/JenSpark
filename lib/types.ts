@@ -124,7 +124,7 @@ export interface FoodItem extends NutritionFacts {
   brand: string | null;
   servingQty: number;
   servingUnit: string;
-  source: "manual" | "openfoodfacts";
+  source: "manual" | "usda" | "nutritionix";
   externalId: string | null;
 }
 
@@ -159,6 +159,7 @@ export interface FoodLogEntry extends NutritionFacts {
   sourceId: string | null;
   mealSlot: MealSlot;
   notes: string | null;
+  servingLabel: string | null;
 }
 
 export interface NutritionGoals {
@@ -178,6 +179,7 @@ export interface FitnessSet {
   setNumber: number;
   weight: number | null;
   reps: number | null;
+  completed: boolean;
 }
 
 export type DistanceUnit = "mi" | "km";
@@ -191,11 +193,23 @@ export interface FitnessLogEntry {
   distanceUnit: DistanceUnit;
   durationMinutes: number | null;
   seatNumber: string | null;
-  machineSettings: string | null;
+  settingTwo: string | null;
+  settingThree: string | null;
   notes: string | null;
   workoutId: string | null;
   imageUrl: string | null;
+  exerciseTypeId: string | null;
+  caloriesBurned: number | null;
   sets?: FitnessSet[];
+}
+
+export interface ExerciseType {
+  id: string;
+  name: string;
+  seatNumber: string | null;
+  settingTwo: string | null;
+  settingThree: string | null;
+  notes: string | null;
 }
 
 export interface WorkoutTemplateItem {

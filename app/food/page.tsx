@@ -10,9 +10,12 @@ import { useAuth } from "@/lib/useAuth";
 import { FoodItem, FoodLogEntry, MealSlot, MealWithItems, NutritionGoals, RecipeWithIngredients } from "@/lib/types";
 import { dateToString, todayDateString } from "@/lib/workoutStore";
 import { FoodSearchResult } from "@/lib/usdaFoodData";
+import { NutritionixResult } from "@/lib/nutritionix";
 import {
   addLogEntry,
   createFoodItem,
+  updateFoodItem,
+  deleteFoodItem,
   createMeal,
   createRecipe,
   deleteLogEntry,
@@ -27,6 +30,7 @@ import {
   MEAL_SLOT_ORDER,
   saveGoals,
   saveSearchResultAsFood,
+  saveNutritionixResultAsFood,
   scaleFood,
 } from "@/lib/foodStore";
 
@@ -117,6 +121,7 @@ export default function FoodPage() {
   const [showManager, setShowManager] = useState(false);
   const [showGoalsEditor, setShowGoalsEditor] = useState(false);
   const [showFullNutrition, setShowFullNutrition] = useState(false);
+  const [expandedEntryId, setExpandedEntryId] = useState<string | null>(null);
 
   const isToday = date === todayDateString();
 
@@ -163,6 +168,12 @@ export default function FoodPage() {
     setDate(dateToString(d));
   };
 
+  const servingLabelFor = (food: FoodItem, quantity: number) => {
+    const totalQty = food.servingQty * quantity;
+    const qtyStr = Number.isInteger(totalQty) ? String(totalQty) : totalQty.toFixed(1);
+    return `${qtyStr} ${food.servingUnit}`;
+  };
+
   const logFood = async (food: FoodItem, quantity: number, mealSlot: MealSlot, notes: string | null) => {
     if (!user) return;
     const s = scaleFood(food, quantity);
@@ -174,6 +185,7 @@ export default function FoodPage() {
       sourceId: food.id,
       mealSlot,
       notes,
+      servingLabel: servingLabelFor(food, quantity),
       ...s,
     });
     if (created) setEntries((prev) => [...prev, created]);
@@ -191,6 +203,7 @@ export default function FoodPage() {
         sourceId: meal.id,
         mealSlot,
         notes,
+        servingLabel: servingLabelFor(item.food, item.quantity),
         ...s,
       });
       if (created) setEntries((prev) => [...prev, created]);
@@ -233,6 +246,7 @@ export default function FoodPage() {
       sourceId: recipe.id,
       mealSlot,
       notes,
+      servingLabel: `${servingsEaten} serving${servingsEaten === 1 ? "" : "s"}`,
       calories: perServing.calories * servingsEaten,
       proteinG: perServing.proteinG * servingsEaten,
       fiberG: perServing.fiberG * servingsEaten,
@@ -335,30 +349,73 @@ export default function FoodPage() {
                 <div className="flex flex-col gap-2">
                   {entries
                     .filter((e) => e.mealSlot === slot)
-                    .map((e) => (
-                      <div
-                        key={e.id}
-                        className="flex items-center justify-between rounded-lg border border-[#E5E7EB] bg-white px-3 py-2.5"
-                      >
-                        <div className="min-w-0">
-                          <p className="text-sm text-[#1D2027] truncate">{e.entryName}</p>
-                          <p className="text-xs text-[#6B7280]">
-                            {Math.round(e.calories)} kcal &middot; {Math.round(e.proteinG)}g protein
-                          </p>
-                          {e.notes && <p className="text-xs text-[#9CA3AF] italic mt-0.5">{e.notes}</p>}
+                    .map((e) => {
+                      const isExpanded = expandedEntryId === e.id;
+                      return (
+                        <div key={e.id} className="rounded-lg border border-[#E5E7EB] bg-white overflow-hidden">
+                          <button
+                            onClick={() => setExpandedEntryId(isExpanded ? null : e.id)}
+                            className="w-full flex items-center justify-between px-3 py-2.5 text-left"
+                          >
+                            <div className="min-w-0">
+                              <p className="text-sm text-[#1D2027] truncate">{e.entryName}</p>
+                              <p className="text-xs text-[#6B7280]">
+                                {Math.round(e.calories)} kcal &middot; {Math.round(e.proteinG)}g protein
+                              </p>
+                              {e.notes && <p className="text-xs text-[#9CA3AF] italic mt-0.5">{e.notes}</p>}
+                            </div>
+                            <span
+                              onClick={async (evt) => {
+                                evt.stopPropagation();
+                                setEntries((prev) => prev.filter((x) => x.id !== e.id));
+                                await deleteLogEntry(e.id);
+                              }}
+                              className="text-[#9CA3AF] hover:text-[#DC2626] text-sm px-1 shrink-0"
+                              aria-label="Remove entry"
+                            >
+                              {"\u00d7"}
+                            </span>
+                          </button>
+                          {isExpanded && (
+                            <div className="px-3 pb-3 pt-1 border-t border-[#F1F2F4]">
+                              <p className="text-[11px] text-[#6B7280] mb-2">
+                                {e.servingLabel ?? `${e.quantity} serving${e.quantity === 1 ? "" : "s"}`}
+                              </p>
+                              <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                                <div className="flex justify-between">
+                                  <span className="text-[#6B7280]">Calories</span>
+                                  <span className="tabular-nums text-[#1D2027]">{Math.round(e.calories)}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-[#6B7280]">Protein</span>
+                                  <span className="tabular-nums text-[#1D2027]">{Math.round(e.proteinG)} g</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-[#6B7280]">Fiber</span>
+                                  <span className="tabular-nums text-[#1D2027]">{Math.round(e.fiberG)} g</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-[#6B7280]">Sugar</span>
+                                  <span className="tabular-nums text-[#1D2027]">{Math.round(e.sugarG)} g</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-[#6B7280]">Fat</span>
+                                  <span className="tabular-nums text-[#1D2027]">{Math.round(e.fatG)} g</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-[#6B7280]">Carbs</span>
+                                  <span className="tabular-nums text-[#1D2027]">{Math.round(e.carbsG)} g</span>
+                                </div>
+                                <div className="flex justify-between col-span-2">
+                                  <span className="text-[#6B7280]">Sodium</span>
+                                  <span className="tabular-nums text-[#1D2027]">{Math.round(e.sodiumMg)} mg</span>
+                                </div>
+                              </div>
+                            </div>
+                          )}
                         </div>
-                        <button
-                          onClick={async () => {
-                            setEntries((prev) => prev.filter((x) => x.id !== e.id));
-                            await deleteLogEntry(e.id);
-                          }}
-                          className="text-[#9CA3AF] hover:text-[#DC2626] text-sm px-1 shrink-0"
-                          aria-label="Remove entry"
-                        >
-                          {"\u00d7"}
-                        </button>
-                      </div>
-                    ))}
+                      );
+                    })}
                 </div>
               </div>
             ))}
@@ -401,6 +458,12 @@ export default function FoodPage() {
               if (created) setMyFoods((prev) => [...prev, created]);
               return created;
             }}
+            onSaveNutritionixResult={async (result: NutritionixResult) => {
+              if (!user) return null;
+              const created = await saveNutritionixResultAsFood(user.id, result);
+              if (created) setMyFoods((prev) => [...prev, created]);
+              return created;
+            }}
             onCreateManualFood={async (food, mealSlot, notes) => {
               if (!user) return;
               const created = await createFoodItem(user.id, food);
@@ -408,6 +471,14 @@ export default function FoodPage() {
                 setMyFoods((prev) => [...prev, created]);
                 logFood(created, 1, mealSlot, notes);
               }
+            }}
+            onUpdateFood={async (id, food) => {
+              setMyFoods((prev) => prev.map((f) => (f.id === id ? { ...f, ...food } : f)));
+              await updateFoodItem(id, food);
+            }}
+            onDeleteFood={async (id) => {
+              setMyFoods((prev) => prev.filter((f) => f.id !== id));
+              await deleteFoodItem(id);
             }}
           />
         )}

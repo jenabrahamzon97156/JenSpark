@@ -24,6 +24,12 @@ import {
   fetchExtraTypes,
 } from "@/lib/extrasStore";
 
+const DEFAULT_HEALTH_TRACKERS: { name: string; emoji: string }[] = [
+  { name: "Headache", emoji: "\ud83e\udd15" },
+  { name: "Period", emoji: "\ud83e\udea8" },
+  { name: "Ovulation", emoji: "\ud83e\udd5a" },
+];
+
 const EMOJI_CHOICES = ["\u2b50", "\ud83d\ude0a", "\ud83d\ude34", "\ud83d\udcda", "\ud83d\udcb0", "\ud83c\udfa8", "\ud83d\udc8a", "\ud83c\udf1e", "\ud83d\udea8", "\ud83c\udfc6", "\ud83d\udc36", "\u2601\ufe0f"];
 
 function NewTrackerForm({ onCreate, onCancel }: { onCreate: (name: string, emoji: string) => void; onCancel: () => void }) {
@@ -68,6 +74,8 @@ function NewTrackerForm({ onCreate, onCancel }: { onCreate: (name: string, emoji
   );
 }
 
+const FLOW_PRESETS = ["Light", "Medium", "Heavy", "Spotting"];
+
 function TrackerSection({
   type,
   records,
@@ -81,8 +89,9 @@ function TrackerSection({
   onDeleteRecord: (id: string) => void;
   onDeleteType: () => void;
 }) {
+  const isPeriod = type.name.trim().toLowerCase() === "period";
   const [adding, setAdding] = useState(false);
-  const [name, setName] = useState("");
+  const [name, setName] = useState(type.name);
   const [notes, setNotes] = useState("");
 
   return (
@@ -112,13 +121,29 @@ function TrackerSection({
 
       {adding ? (
         <div className="flex flex-col gap-1.5">
-          <input
-            autoFocus
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Entry name"
-            className="bg-[#F7F8FA] border border-[#E5E7EB] rounded-md px-3 py-1.5 text-sm text-[#1D2027] focus:outline-none focus:border-[#0D9488]"
-          />
+          {isPeriod ? (
+            <div className="flex flex-wrap gap-1.5">
+              {FLOW_PRESETS.map((f) => (
+                <button
+                  key={f}
+                  onClick={() => setName(f)}
+                  className={`text-xs px-2.5 py-1 rounded-full border ${
+                    name === f ? "bg-[#1D2027] text-white border-[#1D2027]" : "border-[#E5E7EB] text-[#6B7280]"
+                  }`}
+                >
+                  {f}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <input
+              autoFocus
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Entry name"
+              className="bg-[#F7F8FA] border border-[#E5E7EB] rounded-md px-3 py-1.5 text-sm text-[#1D2027] focus:outline-none focus:border-[#0D9488]"
+            />
+          )}
           <input
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
@@ -130,7 +155,7 @@ function TrackerSection({
               onClick={() => {
                 if (!name.trim()) return;
                 onAddRecord(name.trim(), notes);
-                setName("");
+                setName(type.name);
                 setNotes("");
                 setAdding(false);
               }}
@@ -172,9 +197,17 @@ export default function ExtrasPage() {
     if (!user) return;
     setLoading(true);
     Promise.all([fetchDayNotes(user.id, date), fetchExtraTypes(user.id), fetchExtraRecordsForDate(user.id, date)]).then(
-      ([n, t, r]) => {
+      async ([n, t, r]) => {
+        let finalTypes = t;
+        if (t.length === 0) {
+          finalTypes = [];
+          for (const dt of DEFAULT_HEALTH_TRACKERS) {
+            const created = await createExtraType(user.id, dt.name, dt.emoji);
+            if (created) finalTypes.push(created);
+          }
+        }
         setDayNotes(n);
-        setTypes(t);
+        setTypes(finalTypes);
         setRecords(r);
         setLoading(false);
       }

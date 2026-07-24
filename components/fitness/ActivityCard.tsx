@@ -5,7 +5,16 @@
 import { useEffect, useState } from "react";
 import { FitnessLogEntry } from "@/lib/types";
 import { useAuth } from "@/lib/useAuth";
-import { addSet, deleteSet, fetchLoggedDatesForType, fetchRecentLogsForType, removeActivityImage, updateSet, uploadActivityImage } from "@/lib/fitnessStore";
+import {
+  addSet,
+  deleteSet,
+  fetchLoggedDatesForType,
+  fetchRecentLogsForType,
+  removeActivityImage,
+  updateLogFields,
+  updateSet,
+  uploadActivityImage,
+} from "@/lib/fitnessStore";
 import { fetchSettings } from "@/lib/settingsStore";
 import { dateToString as toDateStr } from "@/lib/workoutStore";
 import RestTimer from "@/components/dashboard/RestTimer";
@@ -24,11 +33,13 @@ export default function ActivityCard({
   onDelete,
   onSetsChanged,
   onImageChanged,
+  onFieldsChanged,
 }: {
   log: FitnessLogEntry;
   onDelete: () => void;
   onSetsChanged: (sets: NonNullable<FitnessLogEntry["sets"]>) => void;
   onImageChanged: (imageUrl: string | null) => void;
+  onFieldsChanged: (patch: Partial<FitnessLogEntry>) => void;
 }) {
   const { user } = useAuth();
   const [expanded, setExpanded] = useState(true);
@@ -71,16 +82,20 @@ export default function ActivityCard({
     if (s) onSetsChanged([...sets, s]);
   };
 
-  const editSet = async (id: string, patch: { weight?: number | null; reps?: number | null }) => {
+  const editSet = async (id: string, patch: { weight?: number | null; reps?: number | null; completed?: boolean }) => {
     const next = sets.map((s) => (s.id === id ? { ...s, ...patch } : s));
     onSetsChanged(next);
-    const target = next.find((s) => s.id === id)!;
-    await updateSet(id, target.weight, target.reps);
+    await updateSet(id, patch);
   };
 
   const removeSet = async (id: string) => {
     onSetsChanged(sets.filter((s) => s.id !== id));
     await deleteSet(id);
+  };
+
+  const saveField = async (patch: Partial<{ seatNumber: string | null; settingTwo: string | null; settingThree: string | null; notes: string | null; caloriesBurned: number | null }>) => {
+    onFieldsChanged(patch);
+    await updateLogFields(log.id, patch);
   };
 
   return (
@@ -95,6 +110,7 @@ export default function ActivityCard({
             {log.category === "swimming" &&
               `${log.distance ?? "\u2014"} ${log.distance != null ? log.distanceUnit : ""} \u00b7 ${log.durationMinutes ?? "\u2014"} min`}
             {(log.category === "yoga" || log.category === "stretching") && `${log.durationMinutes ?? "\u2014"} min`}
+            {log.caloriesBurned != null && ` \u00b7 ${log.caloriesBurned} kcal burned`}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -135,21 +151,35 @@ export default function ActivityCard({
 
           {log.category === "weightlifting" && (
             <>
-              {(log.seatNumber || log.machineSettings) && (
-                <p className="text-xs text-[#6B7280] mb-2">
-                  {log.seatNumber && `Seat ${log.seatNumber}`}
-                  {log.seatNumber && log.machineSettings && " \u00b7 "}
-                  {log.machineSettings}
-                </p>
-              )}
-              <div className="grid grid-cols-[28px_1fr_1fr_28px] gap-2 px-1 mb-1">
+              <div className="grid grid-cols-3 gap-1.5 mb-2">
+                <input
+                  value={log.seatNumber ?? ""}
+                  onChange={(e) => saveField({ seatNumber: e.target.value || null })}
+                  placeholder="Seat"
+                  className="bg-[#F7F8FA] border border-[#E5E7EB] rounded-md px-2 py-1 text-xs text-[#1D2027]"
+                />
+                <input
+                  value={log.settingTwo ?? ""}
+                  onChange={(e) => saveField({ settingTwo: e.target.value || null })}
+                  placeholder="Setting #2"
+                  className="bg-[#F7F8FA] border border-[#E5E7EB] rounded-md px-2 py-1 text-xs text-[#1D2027]"
+                />
+                <input
+                  value={log.settingThree ?? ""}
+                  onChange={(e) => saveField({ settingThree: e.target.value || null })}
+                  placeholder="Setting #3"
+                  className="bg-[#F7F8FA] border border-[#E5E7EB] rounded-md px-2 py-1 text-xs text-[#1D2027]"
+                />
+              </div>
+              <div className="grid grid-cols-[24px_1fr_1fr_24px_24px] gap-2 px-1 mb-1">
                 <span></span>
                 <span className="text-[11px] text-[#6B7280]">weight</span>
                 <span className="text-[11px] text-[#6B7280]">reps</span>
                 <span></span>
+                <span></span>
               </div>
               {sets.map((s, i) => (
-                <div key={s.id} className="grid grid-cols-[28px_1fr_1fr_28px] gap-2 items-center py-1">
+                <div key={s.id} className="grid grid-cols-[24px_1fr_1fr_24px_24px] gap-2 items-center py-1">
                   <span className="text-xs font-mono text-[#6B7280] text-center">{i + 1}</span>
                   <input
                     type="number"
@@ -163,6 +193,15 @@ export default function ActivityCard({
                     onChange={(e) => editSet(s.id, { reps: e.target.value ? Number(e.target.value) : null })}
                     className="bg-[#F7F8FA] border border-[#E5E7EB] rounded-md px-2 py-1 text-sm font-mono text-[#1D2027]"
                   />
+                  <button
+                    onClick={() => editSet(s.id, { completed: !s.completed })}
+                    aria-label={s.completed ? "Mark set incomplete" : "Mark set complete"}
+                    className={`h-6 w-6 rounded-md border flex items-center justify-center text-xs ${
+                      s.completed ? "bg-[#0D9488] border-[#0D9488] text-white" : "border-[#D1D5DB] text-transparent"
+                    }`}
+                  >
+                    {"\u2713"}
+                  </button>
                   <button onClick={() => removeSet(s.id)} className="text-[#9CA3AF] hover:text-[#DC2626] text-xs">
                     {"\u00d7"}
                   </button>
@@ -200,7 +239,25 @@ export default function ActivityCard({
             </>
           )}
 
-          {log.notes && <p className="text-xs text-[#6B7280] mt-2">{log.notes}</p>}
+          <div className="mt-2">
+            <textarea
+              value={log.notes ?? ""}
+              onChange={(e) => saveField({ notes: e.target.value || null })}
+              placeholder="Notes"
+              rows={2}
+              className="w-full bg-[#F7F8FA] border border-[#E5E7EB] rounded-md px-2 py-1.5 text-xs text-[#1D2027]"
+            />
+          </div>
+
+          <div className="mt-2 flex items-center gap-2">
+            <label className="text-[11px] text-[#6B7280]">Calories burned</label>
+            <input
+              type="number"
+              value={log.caloriesBurned ?? ""}
+              onChange={(e) => saveField({ caloriesBurned: e.target.value ? Number(e.target.value) : null })}
+              className="w-24 bg-[#F7F8FA] border border-[#E5E7EB] rounded-md px-2 py-1 text-xs font-mono text-[#1D2027]"
+            />
+          </div>
 
           <div className="mt-3">
             {log.imageUrl ? (

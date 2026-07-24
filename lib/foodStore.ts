@@ -10,6 +10,7 @@ import {
   RecipeWithIngredients,
 } from "./types";
 import { FoodSearchResult } from "./usdaFoodData";
+import { NutritionixResult } from "./nutritionix";
 
 export const MEAL_SLOT_ORDER: MealSlot[] = [
   "breakfast",
@@ -67,6 +68,7 @@ function rowToLog(row: any): FoodLogEntry {
     sourceId: row.source_id,
     mealSlot: row.meal_slot ?? "other",
     notes: row.notes ?? null,
+    servingLabel: row.serving_label ?? null,
   };
 }
 
@@ -116,6 +118,31 @@ export async function createFoodItem(
   return rowToFood(data);
 }
 
+export async function updateFoodItem(id: string, input: Omit<FoodItem, "id">) {
+  const { error } = await supabase
+    .from("food_items")
+    .update({
+      name: input.name,
+      brand: input.brand,
+      serving_qty: input.servingQty,
+      serving_unit: input.servingUnit,
+      calories: input.calories,
+      protein_g: input.proteinG,
+      fiber_g: input.fiberG,
+      sugar_g: input.sugarG,
+      fat_g: input.fatG,
+      carbs_g: input.carbsG,
+      sodium_mg: input.sodiumMg,
+    })
+    .eq("id", id);
+  if (error) console.error("Failed to update food:", error.message);
+}
+
+export async function deleteFoodItem(id: string) {
+  const { error } = await supabase.from("food_items").delete().eq("id", id);
+  if (error) console.error("Failed to delete food:", error.message);
+}
+
 export async function saveSearchResultAsFood(
   userId: string,
   result: FoodSearchResult
@@ -132,7 +159,31 @@ export async function saveSearchResultAsFood(
     fatG: result.fatG,
     carbsG: result.carbsG,
     sodiumMg: result.sodiumMg,
-    source: "openfoodfacts",
+    source: "usda",
+    externalId: result.externalId || null,
+  });
+}
+
+// Nutritionix already parses natural US household servings (e.g. "1 large
+// egg", "1 cup"), so unlike USDA we use its serving as-is instead of
+// normalizing everything to 100g.
+export async function saveNutritionixResultAsFood(
+  userId: string,
+  result: NutritionixResult
+): Promise<FoodItem | null> {
+  return createFoodItem(userId, {
+    name: result.name,
+    brand: result.brand,
+    servingQty: result.servingQty,
+    servingUnit: result.servingUnit,
+    calories: result.calories,
+    proteinG: result.proteinG,
+    fiberG: result.fiberG,
+    sugarG: result.sugarG,
+    fatG: result.fatG,
+    carbsG: result.carbsG,
+    sodiumMg: result.sodiumMg,
+    source: "nutritionix",
     externalId: result.externalId || null,
   });
 }
@@ -175,6 +226,7 @@ export async function addLogEntry(
       source_id: input.sourceId,
       meal_slot: input.mealSlot,
       notes: input.notes,
+      serving_label: input.servingLabel,
     })
     .select()
     .single();

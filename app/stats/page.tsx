@@ -12,6 +12,7 @@ import { useAuth } from "@/lib/useAuth";
 import { StatEntry, StatEntryType } from "@/lib/types";
 import { addStatEntry, deleteStatEntry, fetchAllStatEntries, fetchLatestValue } from "@/lib/statsStore";
 import { todayDateString } from "@/lib/workoutStore";
+import StatChart from "@/components/stats/StatChart";
 
 const DEFAULT_MEASUREMENT_TYPES = ["Waist", "Chest", "Shoulders", "Hips", "Thigh", "Arm"];
 
@@ -123,7 +124,7 @@ function AddEntryForm({
           inputMode="decimal"
           value={value}
           onChange={(e) => setValue(e.target.value)}
-          className="flex-1 bg-[#F7F8FA] border border-[#E5E7EB] rounded-md px-3 py-2 text-sm font-mono text-[#1D2027] focus:outline-none focus:border-[#0D9488]"
+          className="flex-1 bg-[#F7F8FA] border border-[#E5E7EB] rounded-md px-3 py-2 text-sm tabular-nums text-[#1D2027] focus:outline-none focus:border-[#0D9488]"
         />
         <span className="text-sm text-[#6B7280] w-8">{entryType === "weight" ? "lb" : "in"}</span>
       </div>
@@ -182,6 +183,8 @@ export default function StatsPage() {
           />
         </div>
 
+        <StatChart entries={[...filteredEntries].reverse()} unit={filteredEntries[0]?.unit ?? "lb"} />
+
         <div className="flex gap-1.5 mb-4 overflow-x-auto">
           {filterOptions.map((f) => (
             <button
@@ -210,7 +213,7 @@ export default function StatsPage() {
                 className="flex items-center justify-between rounded-lg border border-[#E5E7EB] bg-white px-4 py-3"
               >
                 <div>
-                  <p className="text-sm font-mono text-[#1D2027]">
+                  <p className="text-sm tabular-nums text-[#1D2027]">
                     {e.value} {e.unit}
                   </p>
                   <p className="text-xs text-[#6B7280]">

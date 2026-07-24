@@ -6,7 +6,7 @@ submission needed since it's just for you.
 
 ## 0. Set up Supabase (your database)
 
-**If you already ran `supabase/schema.sql` before:** this version adds several new tables. Phase 1: `daily_tasks`, `task_completions`, `stat_entries`. Phase 2 (Food Tracking): `food_items`, `meals`, `meal_items`, `recipes`, `recipe_ingredients`, `food_logs`, `nutrition_goals`. Phase 3 (Fitness restructure): `fitness_logs`, `fitness_sets`, `workouts`, `workout_items` — these replace the old `workout_days` table, which is left in place with any historical data but no longer written to. Just run the SQL Editor step again with the updated file — every statement uses `create table if not exists`, so your existing data is untouched.
+**If you already ran `supabase/schema.sql` before:** this version adds several new tables. Phase 1: `daily_tasks`, `task_completions`, `stat_entries`. Phase 2 (Food Tracking): `food_items`, `meals`, `meal_items`, `recipes`, `recipe_ingredients`, `food_logs`, `nutrition_goals`. Phase 3 (Fitness restructure): `fitness_logs`, `fitness_sets`, `workouts`, `workout_items` — these replace the old `workout_days` table, which is left in place with any historical data but no longer written to. Latest batch: a new `exercise_types` table (your editable weightlifting exercise library — seat/settings/notes), a `user_settings` table (rest timer default, distance unit default), a Storage bucket for activity photos, and new columns across `fitness_logs`/`fitness_sets`/`food_logs` (calories burned, set completion checkboxes, serving-size labels, and more). Just run the SQL Editor step again with the updated file — every statement uses `create table if not exists` (and every security policy is written to safely replace itself), so your existing data is untouched.
 
 This stores your workout history in the cloud, behind a login only you have,
 instead of losing it when you close the browser tab.
@@ -30,10 +30,13 @@ instead of losing it when you close the browser tab.
    Providers → Email**, turn off "Confirm email" so you can sign up and start
    using the app immediately without clicking a confirmation link.
 
-## 0.5. Get a food search API key
+## 0.5. Get food search API keys
 
-The Food Tracking tab's Search feature looks foods up against USDA
-FoodData Central. This needs a free API key (no cost, no credit card):
+The Food Tracking tab's Search feature checks two databases so you can
+compare results — set up either or both; skipping one just disables that
+tab in the source toggle.
+
+**USDA FoodData Central** — free, confirmed no-cost, no credit card:
 
 1. Go to [api.data.gov/signup](https://api.data.gov/signup/), fill in your
    name and email.
@@ -41,8 +44,25 @@ FoodData Central. This needs a free API key (no cost, no credit card):
 3. Add it to your `.env.local` (see step 1 below) as
    `NEXT_PUBLIC_USDA_API_KEY`.
 
-If you skip this, the rest of the app works fine — only the food Search tab
-will show an error until a key is added.
+**Nutritionix** — this is the one that gives natural US serving sizes like
+"1 large egg" instead of always grams:
+
+1. Sign up at [developer.nutritionix.com/signup](https://developer.nutritionix.com/signup).
+2. Your **Application ID** and **API Key** show up in your dashboard under
+   "Applications."
+3. Add them as `NEXT_PUBLIC_NUTRITIONIX_APP_ID` and `NEXT_PUBLIC_NUTRITIONIX_APP_KEY`.
+
+**Worth knowing before you sign up:** older documentation describes
+Nutritionix as free for personal projects, but their own current FAQ says
+they "no longer offer non-commercial free trials." It's possible the signup
+flow still gives a small free/trial allotment, or it may prompt for
+payment — I can't confirm which from here. Try the signup first; if it asks
+for a card or a paid plan, skip it and just use USDA alone (the Search tab
+still works fine with only one source configured), and let me know — I can
+swap in a different second source instead.
+
+If you skip both, the rest of the app works fine — only the food Search tab
+will show an error until at least one key is added.
 
 ## 1. Get it running on your Mac first
 
@@ -83,7 +103,9 @@ Vercel is made by the Next.js team — it's the path of least resistance.
 2. Click **Add New → Project**, pick your `workout-tracker` repo.
 3. Before deploying, expand **Environment Variables** and add the same
    values from your `.env.local`: `NEXT_PUBLIC_SUPABASE_URL`,
-   `NEXT_PUBLIC_SUPABASE_ANON_KEY`, and `NEXT_PUBLIC_USDA_API_KEY`. Without
+   `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_USDA_API_KEY`, and (if you
+   set it up) `NEXT_PUBLIC_NUTRITIONIX_APP_ID` /
+   `NEXT_PUBLIC_NUTRITIONIX_APP_KEY`. Without
    these the deployed app won't be
    able to save anything.
 4. Click **Deploy**.

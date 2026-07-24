@@ -356,6 +356,7 @@ alter table food_logs add column if not exists meal_slot text not null default '
 -- meal_slot: 'breakfast' | 'morning_snack' | 'lunch' | 'afternoon_snack'
 --          | 'dinner' | 'evening_snack' | 'other'
 alter table food_logs add column if not exists notes text;
+alter table food_logs add column if not exists serving_label text;
 
 -- ---------------------------------------------------------------------------
 -- Fitness: optional photo per activity
@@ -439,3 +440,35 @@ create policy "Users manage their own extra types"
 drop policy if exists "Users manage their own extra records" on extra_records;
 create policy "Users manage their own extra records"
   on extra_records for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+-- ---------------------------------------------------------------------------
+-- Weightlifting exercise library
+-- ---------------------------------------------------------------------------
+-- Replaces free-text-only weightlifting types with a real, editable library:
+-- each entry remembers its own seat number and up to two other machine
+-- settings, plus notes, so logging the same exercise next time starts from
+-- what you used last, instead of a blank type-to-search box.
+
+create table if not exists exercise_types (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users (id) on delete cascade,
+  name text not null,
+  seat_number text,
+  setting_2 text,
+  setting_3 text,
+  notes text,
+  created_at timestamptz not null default now()
+);
+
+alter table exercise_types enable row level security;
+
+drop policy if exists "Users manage their own exercise types" on exercise_types;
+create policy "Users manage their own exercise types"
+  on exercise_types for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+alter table fitness_logs add column if not exists exercise_type_id uuid references exercise_types (id) on delete set null;
+alter table fitness_logs add column if not exists calories_burned numeric;
+alter table fitness_logs add column if not exists setting_2 text;
+alter table fitness_logs add column if not exists setting_3 text;
+
+alter table fitness_sets add column if not exists completed boolean not null default false;
