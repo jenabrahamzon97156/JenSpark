@@ -5,19 +5,12 @@
 import { useState } from "react";
 import { FoodItem, MealSlot, MealWithItems, RecipeWithIngredients } from "@/lib/types";
 import { searchFoods as searchUsda, FoodSearchResult } from "@/lib/usdaFoodData";
-import { searchFoods as searchNutritionix, NutritionixResult } from "@/lib/nutritionix";
+import { searchFoods as searchApiNinjas } from "@/lib/apiNinjas";
 import { MEAL_SLOT_LABELS, MEAL_SLOT_ORDER, sumFoods } from "@/lib/foodStore";
 
 type Tab = "search" | "myFoods" | "meals" | "recipes" | "manual";
-type Source = "usda" | "nutritionix";
-type AnyResult = FoodSearchResult | NutritionixResult;
+type Source = "usda" | "apininjas";
 
-function isNutritionixResult(r: AnyResult): r is NutritionixResult {
-  return "servingQty" in r;
-}
-
-// A reasonable time-of-day default so most people don't have to change it —
-// still fully overridable via the pill row.
 function defaultMealSlot(): MealSlot {
   const hour = new Date().getHours();
   if (hour < 10) return "breakfast";
@@ -26,6 +19,41 @@ function defaultMealSlot(): MealSlot {
   if (hour < 17) return "afternoon_snack";
   if (hour < 20) return "dinner";
   return "evening_snack";
+}
+
+function QuantityPicker({
+  label,
+  onConfirm,
+  onCancel,
+}: {
+  label: string;
+  onConfirm: (qty: number) => void;
+  onCancel: () => void;
+}) {
+  const [qty, setQty] = useState("1");
+  return (
+    <div className="rounded-lg border border-[#0D9488] bg-[#0D9488]/5 p-3 mt-2">
+      <p className="text-xs text-[#6B7280] mb-2">{label}</p>
+      <div className="flex gap-2">
+        <input
+          type="number"
+          inputMode="decimal"
+          value={qty}
+          onChange={(e) => setQty(e.target.value)}
+          className="flex-1 min-w-0 bg-white border border-[#E5E7EB] rounded-md px-2 py-2 text-sm font-mono text-[#1D2027] focus:outline-none focus:border-[#0D9488]"
+        />
+        <button
+          onClick={() => onConfirm(Number(qty) || 1)}
+          className="px-4 rounded-md bg-[#0D9488] text-white text-sm font-medium"
+        >
+          Add
+        </button>
+        <button onClick={onCancel} className="px-3 rounded-md border border-[#E5E7EB] text-sm text-[#6B7280]">
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
 }
 
 function FoodEditForm({
@@ -65,12 +93,12 @@ function FoodEditForm({
           value={v.servingQty}
           onChange={(e) => setV({ ...v, servingQty: e.target.value })}
           placeholder="Serving qty"
-          className="bg-white border border-[#E5E7EB] rounded-md px-3 py-2 text-sm text-[#1D2027]"
+          className="min-w-0 bg-white border border-[#E5E7EB] rounded-md px-2 py-2 text-sm text-[#1D2027]"
         />
         <select
           value={v.servingUnit}
           onChange={(e) => setV({ ...v, servingUnit: e.target.value })}
-          className="bg-white border border-[#E5E7EB] rounded-md px-3 py-2 text-sm text-[#1D2027]"
+          className="min-w-0 bg-white border border-[#E5E7EB] rounded-md px-2 py-2 text-sm text-[#1D2027]"
         >
           {["each", "cup", "tbsp", "tsp", "oz", "slice", "piece", "scoop", "bar", "g", "ml"].map((u) => (
             <option key={u} value={u}>
@@ -80,48 +108,12 @@ function FoodEditForm({
         </select>
       </div>
       <div className="grid grid-cols-3 gap-2 mb-2">
-        <input
-          type="number"
-          value={v.calories}
-          onChange={(e) => setV({ ...v, calories: e.target.value })}
-          placeholder="Calories"
-          className="bg-white border border-[#E5E7EB] rounded-md px-2 py-1.5 text-xs text-[#1D2027]"
-        />
-        <input
-          type="number"
-          value={v.proteinG}
-          onChange={(e) => setV({ ...v, proteinG: e.target.value })}
-          placeholder="Protein g"
-          className="bg-white border border-[#E5E7EB] rounded-md px-2 py-1.5 text-xs text-[#1D2027]"
-        />
-        <input
-          type="number"
-          value={v.fiberG}
-          onChange={(e) => setV({ ...v, fiberG: e.target.value })}
-          placeholder="Fiber g"
-          className="bg-white border border-[#E5E7EB] rounded-md px-2 py-1.5 text-xs text-[#1D2027]"
-        />
-        <input
-          type="number"
-          value={v.sugarG}
-          onChange={(e) => setV({ ...v, sugarG: e.target.value })}
-          placeholder="Sugar g"
-          className="bg-white border border-[#E5E7EB] rounded-md px-2 py-1.5 text-xs text-[#1D2027]"
-        />
-        <input
-          type="number"
-          value={v.fatG}
-          onChange={(e) => setV({ ...v, fatG: e.target.value })}
-          placeholder="Fat g"
-          className="bg-white border border-[#E5E7EB] rounded-md px-2 py-1.5 text-xs text-[#1D2027]"
-        />
-        <input
-          type="number"
-          value={v.carbsG}
-          onChange={(e) => setV({ ...v, carbsG: e.target.value })}
-          placeholder="Carbs g"
-          className="bg-white border border-[#E5E7EB] rounded-md px-2 py-1.5 text-xs text-[#1D2027]"
-        />
+        <input type="number" value={v.calories} onChange={(e) => setV({ ...v, calories: e.target.value })} placeholder="Calories" className="min-w-0 bg-white border border-[#E5E7EB] rounded-md px-2 py-1.5 text-xs text-[#1D2027]" />
+        <input type="number" value={v.proteinG} onChange={(e) => setV({ ...v, proteinG: e.target.value })} placeholder="Protein g" className="min-w-0 bg-white border border-[#E5E7EB] rounded-md px-2 py-1.5 text-xs text-[#1D2027]" />
+        <input type="number" value={v.fiberG} onChange={(e) => setV({ ...v, fiberG: e.target.value })} placeholder="Fiber g" className="min-w-0 bg-white border border-[#E5E7EB] rounded-md px-2 py-1.5 text-xs text-[#1D2027]" />
+        <input type="number" value={v.sugarG} onChange={(e) => setV({ ...v, sugarG: e.target.value })} placeholder="Sugar g" className="min-w-0 bg-white border border-[#E5E7EB] rounded-md px-2 py-1.5 text-xs text-[#1D2027]" />
+        <input type="number" value={v.fatG} onChange={(e) => setV({ ...v, fatG: e.target.value })} placeholder="Fat g" className="min-w-0 bg-white border border-[#E5E7EB] rounded-md px-2 py-1.5 text-xs text-[#1D2027]" />
+        <input type="number" value={v.carbsG} onChange={(e) => setV({ ...v, carbsG: e.target.value })} placeholder="Carbs g" className="min-w-0 bg-white border border-[#E5E7EB] rounded-md px-2 py-1.5 text-xs text-[#1D2027]" />
       </div>
       <input
         type="number"
@@ -162,41 +154,6 @@ function FoodEditForm({
   );
 }
 
-function QuantityPicker({
-  label,
-  onConfirm,
-  onCancel,
-}: {
-  label: string;
-  onConfirm: (qty: number) => void;
-  onCancel: () => void;
-}) {
-  const [qty, setQty] = useState("1");
-  return (
-    <div className="rounded-lg border border-[#0D9488] bg-[#0D9488]/5 p-3 mt-2">
-      <p className="text-xs text-[#6B7280] mb-2">{label}</p>
-      <div className="flex gap-2">
-        <input
-          type="number"
-          inputMode="decimal"
-          value={qty}
-          onChange={(e) => setQty(e.target.value)}
-          className="flex-1 bg-white border border-[#E5E7EB] rounded-md px-3 py-2 text-sm font-mono text-[#1D2027] focus:outline-none focus:border-[#0D9488]"
-        />
-        <button
-          onClick={() => onConfirm(Number(qty) || 1)}
-          className="px-4 rounded-md bg-[#0D9488] text-white text-sm font-medium"
-        >
-          Add
-        </button>
-        <button onClick={onCancel} className="px-3 rounded-md border border-[#E5E7EB] text-sm text-[#6B7280]">
-          Cancel
-        </button>
-      </div>
-    </div>
-  );
-}
-
 export default function AddFoodPanel({
   myFoods,
   meals,
@@ -205,10 +162,10 @@ export default function AddFoodPanel({
   onLogMeal,
   onLogRecipe,
   onSaveSearchResult,
-  onSaveNutritionixResult,
   onCreateManualFood,
   onUpdateFood,
   onDeleteFood,
+  onImportStarterFoods,
   onClose,
 }: {
   myFoods: FoodItem[];
@@ -218,23 +175,23 @@ export default function AddFoodPanel({
   onLogMeal: (meal: MealWithItems, mealSlot: MealSlot, notes: string | null) => void;
   onLogRecipe: (recipe: RecipeWithIngredients, servingsEaten: number, mealSlot: MealSlot, notes: string | null) => void;
   onSaveSearchResult: (result: FoodSearchResult) => Promise<FoodItem | null>;
-  onSaveNutritionixResult: (result: NutritionixResult) => Promise<FoodItem | null>;
   onCreateManualFood: (food: Omit<FoodItem, "id">, mealSlot: MealSlot, notes: string | null) => void;
   onUpdateFood: (id: string, food: Omit<FoodItem, "id">) => void;
   onDeleteFood: (id: string) => void;
+  onImportStarterFoods: () => void;
   onClose: () => void;
 }) {
   const [tab, setTab] = useState<Tab>("search");
   const [mealSlot, setMealSlot] = useState<MealSlot>(defaultMealSlot());
   const [notes, setNotes] = useState("");
-  const [source, setSource] = useState<Source>("nutritionix");
+  const [source, setSource] = useState<Source>("apininjas");
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<AnyResult[]>([]);
+  const [results, setResults] = useState<FoodSearchResult[]>([]);
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [hasSearched, setHasSearched] = useState(false);
   const [pickingFood, setPickingFood] = useState<FoodItem | null>(null);
-  const [pickingResult, setPickingResult] = useState<AnyResult | null>(null);
+  const [pickingResult, setPickingResult] = useState<FoodSearchResult | null>(null);
   const [pickingRecipe, setPickingRecipe] = useState<RecipeWithIngredients | null>(null);
   const [editingFoodId, setEditingFoodId] = useState<string | null>(null);
   const [myFoodsFilter, setMyFoodsFilter] = useState("");
@@ -258,7 +215,7 @@ export default function AddFoodPanel({
     setSearchError(null);
     setHasSearched(true);
     try {
-      const r = await (source === "usda" ? searchUsda(query) : searchNutritionix(query));
+      const r = await (source === "usda" ? searchUsda(query) : searchApiNinjas(query));
       setResults(r);
     } catch (e) {
       setResults([]);
@@ -328,7 +285,7 @@ export default function AddFoodPanel({
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && runSearch()}
               placeholder="Search foods, e.g. 'greek yogurt'"
-              className="flex-1 bg-[#F7F8FA] border border-[#E5E7EB] rounded-md px-3 py-2 text-sm text-[#1D2027] focus:outline-none focus:border-[#0D9488]"
+              className="flex-1 min-w-0 bg-[#F7F8FA] border border-[#E5E7EB] rounded-md px-3 py-2 text-sm text-[#1D2027] focus:outline-none focus:border-[#0D9488]"
             />
             <button onClick={runSearch} className="px-4 rounded-md bg-[#0D9488] text-white text-sm font-medium">
               Go
@@ -336,12 +293,12 @@ export default function AddFoodPanel({
           </div>
           <div className="flex gap-1.5 mb-3">
             <button
-              onClick={() => setSource("nutritionix")}
+              onClick={() => setSource("apininjas")}
               className={`text-[11px] px-2.5 py-1 rounded-full border ${
-                source === "nutritionix" ? "bg-[#1D2027] text-white border-[#1D2027]" : "border-[#E5E7EB] text-[#6B7280]"
+                source === "apininjas" ? "bg-[#1D2027] text-white border-[#1D2027]" : "border-[#E5E7EB] text-[#6B7280]"
               }`}
             >
-              Nutritionix (by item)
+              API Ninjas
             </button>
             <button
               onClick={() => setSource("usda")}
@@ -355,49 +312,40 @@ export default function AddFoodPanel({
           {searching && <p className="text-sm text-[#6B7280]">Searching...</p>}
           {searchError && <p className="text-sm text-[#DC2626] mb-2">{searchError}</p>}
           <div className="flex flex-col gap-2 max-h-72 overflow-y-auto">
-            {results.map((r, i) => {
-              const nx = isNutritionixResult(r);
-              return (
-                <div key={i} className="rounded-lg border border-[#E5E7EB] p-2.5">
-                  <div className="flex items-center justify-between">
-                    <div className="min-w-0">
-                      <p className="text-sm text-[#1D2027] truncate">{r.name}</p>
-                      <p className="text-xs text-[#6B7280]">
-                        {r.brand ? `${r.brand} \u00b7 ` : ""}
-                        {r.calories} kcal &middot; {nx ? `${r.servingQty} ${r.servingUnit}` : "per 100g"} &middot;{" "}
-                        {r.proteinG}g protein
-                      </p>
-                    </div>
-                    <button
-                      onClick={() => setPickingResult(r)}
-                      className="shrink-0 text-xs px-3 py-1 rounded-full bg-[#0D9488] text-white"
-                    >
-                      Add
-                    </button>
+            {results.map((r, i) => (
+              <div key={i} className="rounded-lg border border-[#E5E7EB] p-2.5">
+                <div className="flex items-center justify-between">
+                  <div className="min-w-0">
+                    <p className="text-sm text-[#1D2027] truncate">{r.name}</p>
+                    <p className="text-xs text-[#6B7280]">
+                      {r.brand ? `${r.brand} \u00b7 ` : ""}
+                      {r.calories} kcal / 100g &middot; {r.proteinG}g protein
+                    </p>
                   </div>
-                  {pickingResult === r && (
-                    <QuantityPicker
-                      label={nx ? `Servings of ${r.servingQty} ${r.servingUnit}` : "Servings of 100g"}
-                      onConfirm={async (qty) => {
-                        let saved: FoodItem | null;
-                        if (isNutritionixResult(r)) {
-                          saved = await onSaveNutritionixResult(r);
-                        } else {
-                          saved = await onSaveSearchResult(r);
-                        }
-                        if (saved) onLogFood(saved, qty, mealSlot, notes || null);
-                        setPickingResult(null);
-                      }}
-                      onCancel={() => setPickingResult(null)}
-                    />
-                  )}
+                  <button
+                    onClick={() => setPickingResult(r)}
+                    className="shrink-0 text-xs px-3 py-1 rounded-full bg-[#0D9488] text-white"
+                  >
+                    Add
+                  </button>
                 </div>
-              );
-            })}
+                {pickingResult === r && (
+                  <QuantityPicker
+                    label="Servings of 100g"
+                    onConfirm={async (qty) => {
+                      const saved = await onSaveSearchResult(r);
+                      if (saved) onLogFood(saved, qty, mealSlot, notes || null);
+                      setPickingResult(null);
+                    }}
+                    onCancel={() => setPickingResult(null)}
+                  />
+                )}
+              </div>
+            ))}
             {hasSearched && !searching && !searchError && results.length === 0 && (
               <div className="text-center py-3">
                 <p className="text-sm text-[#6B7280] mb-2">
-                  No results in {source === "usda" ? "USDA" : "Nutritionix"}.
+                  No results in {source === "usda" ? "USDA" : "API Ninjas"}.
                 </p>
                 <button
                   onClick={() => {
@@ -424,9 +372,17 @@ export default function AddFoodPanel({
           />
           <div className="flex flex-col gap-2 max-h-72 overflow-y-auto">
             {myFoods.length === 0 && (
-              <p className="text-sm text-[#6B7280] py-3 text-center">
-                No saved foods yet — add one manually or from Search.
-              </p>
+              <div className="text-center py-3">
+                <p className="text-sm text-[#6B7280] mb-2">
+                  No saved foods yet — add one manually, from Search, or start with a common-foods list.
+                </p>
+                <button
+                  onClick={onImportStarterFoods}
+                  className="text-xs px-3 py-1.5 rounded-full border border-[#0D9488] text-[#0D9488]"
+                >
+                  Import ~40 common foods
+                </button>
+              </div>
             )}
             {myFoods
               .filter((f) => f.name.toLowerCase().includes(myFoodsFilter.toLowerCase()))
@@ -570,12 +526,12 @@ export default function AddFoodPanel({
               type="number"
               value={manual.servingQty}
               onChange={(e) => setManual({ ...manual, servingQty: e.target.value })}
-              className="bg-[#F7F8FA] border border-[#E5E7EB] rounded-md px-3 py-2 text-sm text-[#1D2027] focus:outline-none focus:border-[#0D9488]"
+              className="min-w-0 bg-[#F7F8FA] border border-[#E5E7EB] rounded-md px-2 py-2 text-sm text-[#1D2027] focus:outline-none focus:border-[#0D9488]"
             />
             <select
               value={manual.servingUnit}
               onChange={(e) => setManual({ ...manual, servingUnit: e.target.value })}
-              className="bg-[#F7F8FA] border border-[#E5E7EB] rounded-md px-3 py-2 text-sm text-[#1D2027] focus:outline-none focus:border-[#0D9488]"
+              className="min-w-0 bg-[#F7F8FA] border border-[#E5E7EB] rounded-md px-2 py-2 text-sm text-[#1D2027] focus:outline-none focus:border-[#0D9488]"
             >
               {["each", "cup", "tbsp", "tsp", "oz", "slice", "piece", "scoop", "bar", "g", "ml"].map((u) => (
                 <option key={u} value={u}>
@@ -586,55 +542,13 @@ export default function AddFoodPanel({
           </div>
           <p className="text-[10px] text-[#6B7280] mt-1">Nutrition facts (per serving above)</p>
           <div className="grid grid-cols-3 gap-2">
-            <input
-              placeholder="Calories"
-              type="number"
-              value={manual.calories}
-              onChange={(e) => setManual({ ...manual, calories: e.target.value })}
-              className="bg-[#F7F8FA] border border-[#E5E7EB] rounded-md px-3 py-2 text-sm text-[#1D2027] focus:outline-none focus:border-[#0D9488]"
-            />
-            <input
-              placeholder="Protein g"
-              type="number"
-              value={manual.proteinG}
-              onChange={(e) => setManual({ ...manual, proteinG: e.target.value })}
-              className="bg-[#F7F8FA] border border-[#E5E7EB] rounded-md px-3 py-2 text-sm text-[#1D2027] focus:outline-none focus:border-[#0D9488]"
-            />
-            <input
-              placeholder="Fiber g"
-              type="number"
-              value={manual.fiberG}
-              onChange={(e) => setManual({ ...manual, fiberG: e.target.value })}
-              className="bg-[#F7F8FA] border border-[#E5E7EB] rounded-md px-3 py-2 text-sm text-[#1D2027] focus:outline-none focus:border-[#0D9488]"
-            />
-            <input
-              placeholder="Sugar g"
-              type="number"
-              value={manual.sugarG}
-              onChange={(e) => setManual({ ...manual, sugarG: e.target.value })}
-              className="bg-[#F7F8FA] border border-[#E5E7EB] rounded-md px-3 py-2 text-sm text-[#1D2027] focus:outline-none focus:border-[#0D9488]"
-            />
-            <input
-              placeholder="Fat g"
-              type="number"
-              value={manual.fatG}
-              onChange={(e) => setManual({ ...manual, fatG: e.target.value })}
-              className="bg-[#F7F8FA] border border-[#E5E7EB] rounded-md px-3 py-2 text-sm text-[#1D2027] focus:outline-none focus:border-[#0D9488]"
-            />
-            <input
-              placeholder="Carbs g"
-              type="number"
-              value={manual.carbsG}
-              onChange={(e) => setManual({ ...manual, carbsG: e.target.value })}
-              className="bg-[#F7F8FA] border border-[#E5E7EB] rounded-md px-3 py-2 text-sm text-[#1D2027] focus:outline-none focus:border-[#0D9488]"
-            />
-            <input
-              placeholder="Sodium mg"
-              type="number"
-              value={manual.sodiumMg}
-              onChange={(e) => setManual({ ...manual, sodiumMg: e.target.value })}
-              className="bg-[#F7F8FA] border border-[#E5E7EB] rounded-md px-3 py-2 text-sm text-[#1D2027] focus:outline-none focus:border-[#0D9488] col-span-2"
-            />
+            <input placeholder="Calories" type="number" value={manual.calories} onChange={(e) => setManual({ ...manual, calories: e.target.value })} className="min-w-0 bg-[#F7F8FA] border border-[#E5E7EB] rounded-md px-2 py-2 text-sm text-[#1D2027] focus:outline-none focus:border-[#0D9488]" />
+            <input placeholder="Protein g" type="number" value={manual.proteinG} onChange={(e) => setManual({ ...manual, proteinG: e.target.value })} className="min-w-0 bg-[#F7F8FA] border border-[#E5E7EB] rounded-md px-2 py-2 text-sm text-[#1D2027] focus:outline-none focus:border-[#0D9488]" />
+            <input placeholder="Fiber g" type="number" value={manual.fiberG} onChange={(e) => setManual({ ...manual, fiberG: e.target.value })} className="min-w-0 bg-[#F7F8FA] border border-[#E5E7EB] rounded-md px-2 py-2 text-sm text-[#1D2027] focus:outline-none focus:border-[#0D9488]" />
+            <input placeholder="Sugar g" type="number" value={manual.sugarG} onChange={(e) => setManual({ ...manual, sugarG: e.target.value })} className="min-w-0 bg-[#F7F8FA] border border-[#E5E7EB] rounded-md px-2 py-2 text-sm text-[#1D2027] focus:outline-none focus:border-[#0D9488]" />
+            <input placeholder="Fat g" type="number" value={manual.fatG} onChange={(e) => setManual({ ...manual, fatG: e.target.value })} className="min-w-0 bg-[#F7F8FA] border border-[#E5E7EB] rounded-md px-2 py-2 text-sm text-[#1D2027] focus:outline-none focus:border-[#0D9488]" />
+            <input placeholder="Carbs g" type="number" value={manual.carbsG} onChange={(e) => setManual({ ...manual, carbsG: e.target.value })} className="min-w-0 bg-[#F7F8FA] border border-[#E5E7EB] rounded-md px-2 py-2 text-sm text-[#1D2027] focus:outline-none focus:border-[#0D9488]" />
+            <input placeholder="Sodium mg" type="number" value={manual.sodiumMg} onChange={(e) => setManual({ ...manual, sodiumMg: e.target.value })} className="min-w-0 bg-[#F7F8FA] border border-[#E5E7EB] rounded-md px-2 py-2 text-sm text-[#1D2027] focus:outline-none focus:border-[#0D9488] col-span-2" />
           </div>
           <button
             onClick={() => {
@@ -644,7 +558,7 @@ export default function AddFoodPanel({
                   name: manual.name.trim(),
                   brand: null,
                   servingQty: Number(manual.servingQty) || 1,
-                  servingUnit: manual.servingUnit || "serving",
+                  servingUnit: manual.servingUnit || "each",
                   calories: Number(manual.calories) || 0,
                   proteinG: Number(manual.proteinG) || 0,
                   fiberG: Number(manual.fiberG) || 0,

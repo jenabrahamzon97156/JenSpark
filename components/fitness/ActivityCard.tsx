@@ -156,22 +156,22 @@ export default function ActivityCard({
                   value={log.seatNumber ?? ""}
                   onChange={(e) => saveField({ seatNumber: e.target.value || null })}
                   placeholder="Seat"
-                  className="bg-[#F7F8FA] border border-[#E5E7EB] rounded-md px-2 py-1 text-xs text-[#1D2027]"
+                  className="min-w-0 w-full bg-[#F7F8FA] border border-[#E5E7EB] rounded-md px-1.5 py-1 text-xs text-[#1D2027]"
                 />
                 <input
                   value={log.settingTwo ?? ""}
                   onChange={(e) => saveField({ settingTwo: e.target.value || null })}
                   placeholder="Setting #2"
-                  className="bg-[#F7F8FA] border border-[#E5E7EB] rounded-md px-2 py-1 text-xs text-[#1D2027]"
+                  className="min-w-0 w-full bg-[#F7F8FA] border border-[#E5E7EB] rounded-md px-1.5 py-1 text-xs text-[#1D2027]"
                 />
                 <input
                   value={log.settingThree ?? ""}
                   onChange={(e) => saveField({ settingThree: e.target.value || null })}
                   placeholder="Setting #3"
-                  className="bg-[#F7F8FA] border border-[#E5E7EB] rounded-md px-2 py-1 text-xs text-[#1D2027]"
+                  className="min-w-0 w-full bg-[#F7F8FA] border border-[#E5E7EB] rounded-md px-1.5 py-1 text-xs text-[#1D2027]"
                 />
               </div>
-              <div className="grid grid-cols-[24px_1fr_1fr_24px_24px] gap-2 px-1 mb-1">
+              <div className="grid grid-cols-[20px_1fr_1fr_28px_20px] gap-1.5 px-1 mb-1">
                 <span></span>
                 <span className="text-[11px] text-[#6B7280]">weight</span>
                 <span className="text-[11px] text-[#6B7280]">reps</span>
@@ -179,19 +179,21 @@ export default function ActivityCard({
                 <span></span>
               </div>
               {sets.map((s, i) => (
-                <div key={s.id} className="grid grid-cols-[24px_1fr_1fr_24px_24px] gap-2 items-center py-1">
+                <div key={s.id} className="grid grid-cols-[20px_1fr_1fr_28px_20px] gap-1.5 items-center py-1">
                   <span className="text-xs font-mono text-[#6B7280] text-center">{i + 1}</span>
                   <input
                     type="number"
+                    inputMode="decimal"
                     value={s.weight ?? ""}
                     onChange={(e) => editSet(s.id, { weight: e.target.value ? Number(e.target.value) : null })}
-                    className="bg-[#F7F8FA] border border-[#E5E7EB] rounded-md px-2 py-1 text-sm font-mono text-[#1D2027]"
+                    className="min-w-0 w-full bg-[#F7F8FA] border border-[#E5E7EB] rounded-md px-1.5 py-1 text-sm font-mono text-[#1D2027]"
                   />
                   <input
                     type="number"
+                    inputMode="numeric"
                     value={s.reps ?? ""}
                     onChange={(e) => editSet(s.id, { reps: e.target.value ? Number(e.target.value) : null })}
-                    className="bg-[#F7F8FA] border border-[#E5E7EB] rounded-md px-2 py-1 text-sm font-mono text-[#1D2027]"
+                    className="min-w-0 w-full bg-[#F7F8FA] border border-[#E5E7EB] rounded-md px-1.5 py-1 text-sm font-mono text-[#1D2027]"
                   />
                   <button
                     onClick={() => editSet(s.id, { completed: !s.completed })}

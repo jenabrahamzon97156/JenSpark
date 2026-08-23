@@ -6,3 +6,16 @@ html,
 body {
   background-color: #F7F8FA;
 }
+
+/* Number input spinner arrows eat into already-tight column widths on
+   mobile (e.g. weight/reps columns in the Fitness log). Hiding them frees
+   up space without losing functionality — the on-screen numeric keyboard
+   is how these get filled in on a phone anyway. */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+}

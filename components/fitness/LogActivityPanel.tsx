@@ -59,13 +59,13 @@ function ExerciseForm({
           value={values.seatNumber}
           onChange={(e) => setValues({ ...values, seatNumber: e.target.value })}
           placeholder="Seat"
-          className="bg-white border border-[#E5E7EB] rounded-md px-3 py-2 text-sm text-[#1D2027] focus:outline-none focus:border-[#0D9488]"
+          className="min-w-0 w-full bg-white border border-[#E5E7EB] rounded-md px-2 py-2 text-sm text-[#1D2027] focus:outline-none focus:border-[#0D9488]"
         />
         <input
           value={values.settingTwo}
           onChange={(e) => setValues({ ...values, settingTwo: e.target.value })}
           placeholder="Setting #2"
-          className="bg-white border border-[#E5E7EB] rounded-md px-3 py-2 text-sm text-[#1D2027] focus:outline-none focus:border-[#0D9488]"
+          className="min-w-0 w-full bg-white border border-[#E5E7EB] rounded-md px-2 py-2 text-sm text-[#1D2027] focus:outline-none focus:border-[#0D9488]"
         />
       </div>
       <input
@@ -436,7 +436,7 @@ export default function LogActivityPanel({
                 type="number"
                 value={durationMinutes}
                 onChange={(e) => setDurationMinutes(e.target.value)}
-                className="bg-[#F7F8FA] border border-[#E5E7EB] rounded-md px-3 py-2 text-sm text-[#1D2027] focus:outline-none focus:border-[#0D9488]"
+                className="min-w-0 w-full bg-[#F7F8FA] border border-[#E5E7EB] rounded-md px-2 py-2 text-sm text-[#1D2027] focus:outline-none focus:border-[#0D9488]"
               />
             </div>
           )}

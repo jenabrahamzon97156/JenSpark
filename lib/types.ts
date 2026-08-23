@@ -124,7 +124,7 @@ export interface FoodItem extends NutritionFacts {
   brand: string | null;
   servingQty: number;
   servingUnit: string;
-  source: "manual" | "usda" | "nutritionix";
+  source: "manual" | "usda" | "apininjas";
   externalId: string | null;
 }
 
@@ -221,7 +221,14 @@ export interface WorkoutTemplateItem {
 export interface WorkoutTemplate {
   id: string;
   name: string;
+  description: string | null;
+  archived: boolean;
   items: WorkoutTemplateItem[];
+}
+
+export interface FitnessTip {
+  id: string;
+  content: string;
 }
 
 // ---------------------------------------------------------------------------

@@ -10,7 +10,6 @@ import { useAuth } from "@/lib/useAuth";
 import { FoodItem, FoodLogEntry, MealSlot, MealWithItems, NutritionGoals, RecipeWithIngredients } from "@/lib/types";
 import { dateToString, todayDateString } from "@/lib/workoutStore";
 import { FoodSearchResult } from "@/lib/usdaFoodData";
-import { NutritionixResult } from "@/lib/nutritionix";
 import {
   addLogEntry,
   createFoodItem,
@@ -30,7 +29,7 @@ import {
   MEAL_SLOT_ORDER,
   saveGoals,
   saveSearchResultAsFood,
-  saveNutritionixResultAsFood,
+  importStarterFoods,
   scaleFood,
 } from "@/lib/foodStore";
 
@@ -458,12 +457,6 @@ export default function FoodPage() {
               if (created) setMyFoods((prev) => [...prev, created]);
               return created;
             }}
-            onSaveNutritionixResult={async (result: NutritionixResult) => {
-              if (!user) return null;
-              const created = await saveNutritionixResultAsFood(user.id, result);
-              if (created) setMyFoods((prev) => [...prev, created]);
-              return created;
-            }}
             onCreateManualFood={async (food, mealSlot, notes) => {
               if (!user) return;
               const created = await createFoodItem(user.id, food);
@@ -479,6 +472,11 @@ export default function FoodPage() {
             onDeleteFood={async (id) => {
               setMyFoods((prev) => prev.filter((f) => f.id !== id));
               await deleteFoodItem(id);
+            }}
+            onImportStarterFoods={async () => {
+              if (!user) return;
+              const imported = await importStarterFoods(user.id);
+              setMyFoods((prev) => [...prev, ...imported]);
             }}
           />
         )}

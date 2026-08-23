@@ -3,22 +3,26 @@
 // app/dashboard/page.tsx (Fitness tab)
 //
 // Rebuilt for Phase 3: flexible category-based logging instead of a single
-// fixed daily program. See lib/fitnessStore.ts and the PRD's Fitness section
-// for the model this replaces.
+// fixed daily program. Logged activities render most-recent-first (not
+// grouped by category) so the exercise you just logged is right at the top
+// — easier to go back and forth between sets on the same exercise.
 
 import { useEffect, useState } from "react";
 import AppShell from "@/components/AppShell";
 import ActivityCard from "@/components/fitness/ActivityCard";
 import LogActivityPanel, { LogActivityInput } from "@/components/fitness/LogActivityPanel";
 import WorkoutsManager from "@/components/fitness/WorkoutsManager";
+import FitnessTipsPanel from "@/components/fitness/FitnessTipsPanel";
 import { useAuth } from "@/lib/useAuth";
 import { supabase } from "@/lib/supabaseClient";
-import { DistanceUnit, FitnessLogEntry, FitnessSet, WorkoutTemplate } from "@/lib/types";
+import { DistanceUnit, FitnessLogEntry, FitnessSet, FitnessTip, WorkoutTemplate } from "@/lib/types";
 import { dateToString, todayDateString } from "@/lib/workoutStore";
 import {
   createDefaultSets,
   createLog,
   createWorkout,
+  updateWorkout,
+  setWorkoutArchived,
   deleteLog,
   deleteWorkout,
   fetchLogsForDate,
@@ -26,6 +30,7 @@ import {
   logWorkoutForDate,
 } from "@/lib/fitnessStore";
 import { fetchSettings, saveSettings } from "@/lib/settingsStore";
+import { addFitnessTip, deleteFitnessTip, fetchFitnessTips, updateFitnessTip } from "@/lib/fitnessTipsStore";
 
 export default function FitnessPage() {
   const { user } = useAuth();
@@ -35,6 +40,8 @@ export default function FitnessPage() {
   const [loading, setLoading] = useState(true);
   const [showLogPanel, setShowLogPanel] = useState(false);
   const [showWorkouts, setShowWorkouts] = useState(false);
+  const [showTips, setShowTips] = useState(false);
+  const [tips, setTips] = useState<FitnessTip[]>([]);
   const [showRestSettings, setShowRestSettings] = useState(false);
   const [restDefault, setRestDefault] = useState(60);
   const [distanceUnitDefault, setDistanceUnitDefault] = useState<DistanceUnit>("mi");
@@ -54,6 +61,11 @@ export default function FitnessPage() {
       }
     );
   }, [user, date]);
+
+  useEffect(() => {
+    if (!user) return;
+    fetchFitnessTips(user.id).then(setTips);
+  }, [user]);
 
   const shiftDate = (delta: number) => {
     const d = new Date(date + "T00:00:00");
@@ -82,11 +94,9 @@ export default function FitnessPage() {
     if (date !== todayDateString()) setDate(todayDateString());
   };
 
-  const byCategory = logs.reduce<Record<string, FitnessLogEntry[]>>((acc, l) => {
-    acc[l.category] = acc[l.category] ?? [];
-    acc[l.category].push(l);
-    return acc;
-  }, {});
+  // Most-recently-logged first, so whatever you just added is at the top —
+  // easier to go back and forth on the same exercise across sets.
+  const orderedLogs = [...logs].reverse();
 
   return (
     <AppShell>
@@ -196,32 +206,28 @@ export default function FitnessPage() {
         {loading ? (
           <p className="text-sm text-[#6B7280]">Loading...</p>
         ) : (
-          <div className="flex flex-col gap-3 mb-4">
-            {logs.length === 0 && (
+          <div className="flex flex-col gap-2 mb-4">
+            {orderedLogs.length === 0 && (
               <p className="text-sm text-[#6B7280] py-3 text-center">Nothing logged for this day yet.</p>
             )}
-            {Object.entries(byCategory).map(([category, catLogs]) => (
-              <div key={category} className="flex flex-col gap-2">
-                {catLogs.map((log) => (
-                  <ActivityCard
-                    key={log.id}
-                    log={log}
-                    onDelete={async () => {
-                      setLogs((prev) => prev.filter((l) => l.id !== log.id));
-                      await deleteLog(log.id);
-                    }}
-                    onSetsChanged={(sets: FitnessSet[]) =>
-                      setLogs((prev) => prev.map((l) => (l.id === log.id ? { ...l, sets } : l)))
-                    }
-                    onImageChanged={(imageUrl: string | null) =>
-                      setLogs((prev) => prev.map((l) => (l.id === log.id ? { ...l, imageUrl } : l)))
-                    }
-                    onFieldsChanged={(patch) =>
-                      setLogs((prev) => prev.map((l) => (l.id === log.id ? { ...l, ...patch } : l)))
-                    }
-                  />
-                ))}
-              </div>
+            {orderedLogs.map((log) => (
+              <ActivityCard
+                key={log.id}
+                log={log}
+                onDelete={async () => {
+                  setLogs((prev) => prev.filter((l) => l.id !== log.id));
+                  await deleteLog(log.id);
+                }}
+                onSetsChanged={(sets: FitnessSet[]) =>
+                  setLogs((prev) => prev.map((l) => (l.id === log.id ? { ...l, sets } : l)))
+                }
+                onImageChanged={(imageUrl: string | null) =>
+                  setLogs((prev) => prev.map((l) => (l.id === log.id ? { ...l, imageUrl } : l)))
+                }
+                onFieldsChanged={(patch) =>
+                  setLogs((prev) => prev.map((l) => (l.id === log.id ? { ...l, ...patch } : l)))
+                }
+              />
             ))}
           </div>
         )}
@@ -231,6 +237,7 @@ export default function FitnessPage() {
             onClick={() => {
               setShowLogPanel((s) => !s);
               setShowWorkouts(false);
+              setShowTips(false);
             }}
             className="flex-1 rounded-md bg-[#0D9488] text-white text-sm font-medium py-2.5"
           >
@@ -240,23 +247,63 @@ export default function FitnessPage() {
             onClick={() => {
               setShowWorkouts((s) => !s);
               setShowLogPanel(false);
+              setShowTips(false);
             }}
             className="px-4 rounded-md border border-[#E5E7EB] text-sm text-[#6B7280]"
           >
             Workouts
           </button>
+          <button
+            onClick={() => {
+              setShowTips((s) => !s);
+              setShowLogPanel(false);
+              setShowWorkouts(false);
+            }}
+            className="px-4 rounded-md border border-[#E5E7EB] text-sm text-[#6B7280]"
+          >
+            Tips
+          </button>
         </div>
 
         {showLogPanel && <LogActivityPanel onLog={handleLog} onClose={() => setShowLogPanel(false)} />}
+
+        {showTips && (
+          <FitnessTipsPanel
+            tips={tips}
+            onClose={() => setShowTips(false)}
+            onAdd={async (content) => {
+              if (!user) return;
+              const created = await addFitnessTip(user.id, content);
+              if (created) setTips((prev) => [created, ...prev]);
+            }}
+            onUpdate={async (id, content) => {
+              setTips((prev) => prev.map((t) => (t.id === id ? { ...t, content } : t)));
+              await updateFitnessTip(id, content);
+            }}
+            onDelete={async (id) => {
+              setTips((prev) => prev.filter((t) => t.id !== id));
+              await deleteFitnessTip(id);
+            }}
+          />
+        )}
 
         {showWorkouts && (
           <WorkoutsManager
             workouts={workouts}
             onClose={() => setShowWorkouts(false)}
-            onCreate={async (name, items) => {
+            onCreate={async (name, description, items) => {
               if (!user) return;
-              await createWorkout(user.id, name, items);
+              await createWorkout(user.id, name, description, items);
               setWorkouts(await fetchWorkouts(user.id));
+            }}
+            onUpdate={async (id, name, description, items) => {
+              if (!user) return;
+              await updateWorkout(user.id, id, name, description, items);
+              setWorkouts(await fetchWorkouts(user.id));
+            }}
+            onArchiveToggle={async (id, archived) => {
+              setWorkouts((prev) => prev.map((w) => (w.id === id ? { ...w, archived } : w)));
+              await setWorkoutArchived(id, archived);
             }}
             onDelete={async (id) => {
               setWorkouts((prev) => prev.filter((w) => w.id !== id));

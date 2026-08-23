@@ -39,10 +39,21 @@ export default function HomePage() {
   const [monthWorkoutDates, setMonthWorkoutDates] = useState<Set<string>>(new Set());
   const [monthFoodDates, setMonthFoodDates] = useState<Set<string>>(new Set());
   const [monthExtrasByDate, setMonthExtrasByDate] = useState<Map<string, string[]>>(new Map());
+  const [monthLoading, setMonthLoading] = useState(true);
 
   const today = todayDateString();
   const now = new Date();
-  const monthLabel = now.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+
+  // The month shown in the calendar — independent of "today" so browsing to
+  // a past/future month never changes the status cards or week rollup above,
+  // which always reflect the real current date.
+  const [calendarMonth, setCalendarMonth] = useState(() => new Date(now.getFullYear(), now.getMonth(), 1));
+  const monthLabel = calendarMonth.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+  const isCurrentMonth = calendarMonth.getFullYear() === now.getFullYear() && calendarMonth.getMonth() === now.getMonth();
+
+  const shiftMonth = (delta: number) => {
+    setCalendarMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + delta, 1));
+  };
 
   useEffect(() => {
     if (!user) return;
@@ -50,34 +61,21 @@ export default function HomePage() {
 
     async function load() {
       const weekStart = dateToString(startOfWeek(now));
-      const monthStart = dateToString(new Date(now.getFullYear(), now.getMonth(), 1));
-      const monthEnd = dateToString(new Date(now.getFullYear(), now.getMonth() + 1, 0));
 
-      const [tasks, completions, weekDates, monthDates, weight, monthFood, monthExtras] = await Promise.all([
+      const [tasks, completions, weekDates, fitnessToday, weight] = await Promise.all([
         fetchActiveTasks(user!.id),
         fetchCompletionsForDate(user!.id, today),
         fetchAllFitnessDatesInRange(user!.id, weekStart, today),
-        fetchAllFitnessDatesInRange(user!.id, monthStart, monthEnd),
+        fetchAllFitnessDatesInRange(user!.id, today, today),
         fetchLatestValue(user!.id, "weight", null),
-        fetchFoodLoggedDatesInRange(user!.id, monthStart, monthEnd),
-        fetchExtraRecordDatesInRange(user!.id, monthStart, monthEnd),
       ]);
 
       if (cancelled) return;
       const todaysTasks = tasks.filter((t) => taskAppliesOnDate(t, today));
       setTasksToday(todaysTasks);
       setCompletionsToday(completions);
-      setFitnessLoggedToday(monthDates.includes(today));
+      setFitnessLoggedToday(fitnessToday.includes(today));
       setWeekFitnessDays(new Set(weekDates).size);
-      setMonthWorkoutDates(new Set(monthDates));
-      setMonthFoodDates(new Set(monthFood));
-      const extrasMap = new Map<string, string[]>();
-      for (const e of monthExtras) {
-        const list = extrasMap.get(e.date) ?? [];
-        if (!list.includes(e.emoji)) list.push(e.emoji);
-        extrasMap.set(e.date, list);
-      }
-      setMonthExtrasByDate(extrasMap);
       setLatestWeight(weight);
       setLoading(false);
     }
@@ -89,11 +87,47 @@ export default function HomePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, today]);
 
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+
+    async function loadMonth() {
+      setMonthLoading(true);
+      const year = calendarMonth.getFullYear();
+      const month = calendarMonth.getMonth();
+      const monthStart = dateToString(new Date(year, month, 1));
+      const monthEnd = dateToString(new Date(year, month + 1, 0));
+
+      const [monthDates, monthFood, monthExtras] = await Promise.all([
+        fetchAllFitnessDatesInRange(user!.id, monthStart, monthEnd),
+        fetchFoodLoggedDatesInRange(user!.id, monthStart, monthEnd),
+        fetchExtraRecordDatesInRange(user!.id, monthStart, monthEnd),
+      ]);
+
+      if (cancelled) return;
+      setMonthWorkoutDates(new Set(monthDates));
+      setMonthFoodDates(new Set(monthFood));
+      const extrasMap = new Map<string, string[]>();
+      for (const e of monthExtras) {
+        const list = extrasMap.get(e.date) ?? [];
+        if (!list.includes(e.emoji)) list.push(e.emoji);
+        extrasMap.set(e.date, list);
+      }
+      setMonthExtrasByDate(extrasMap);
+      setMonthLoading(false);
+    }
+
+    loadMonth();
+    return () => {
+      cancelled = true;
+    };
+  }, [user, calendarMonth]);
+
   const completedToday = tasksToday.filter((t) => completionsToday[t.id]).length;
 
   const calendarDays = useMemo(() => {
-    const year = now.getFullYear();
-    const month = now.getMonth();
+    const year = calendarMonth.getFullYear();
+    const month = calendarMonth.getMonth();
     const firstDay = new Date(year, month, 1);
     const daysInMonth = new Date(year, month + 1, 0).getDate();
     const leadingBlanks = firstDay.getDay();
@@ -103,8 +137,7 @@ export default function HomePage() {
       cells.push({ date: dateToString(new Date(year, month, d)), day: d });
     }
     return cells;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [calendarMonth]);
 
   return (
     <AppShell>
@@ -163,14 +196,38 @@ export default function HomePage() {
             </div>
 
             <div className="rounded-xl border border-[#E5E7EB] bg-white p-4">
-              <div className="flex items-center justify-between mb-3">
-                <p className="text-sm font-medium text-[#1D2027]">{monthLabel}</p>
-                <div className="flex items-center gap-3 text-[11px] text-[#9CA3AF]">
-                  <span>{"\ud83d\udcaa"} fitness</span>
-                  <span>{"\ud83c\udf7d\ufe0f"} food</span>
+              <div className="flex items-center justify-between mb-1">
+                <button
+                  onClick={() => shiftMonth(-1)}
+                  className="text-[#6B7280] px-2 py-1 text-sm"
+                  aria-label="Previous month"
+                >
+                  {"\u2039"}
+                </button>
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-medium text-[#1D2027]">{monthLabel}</p>
+                  {!isCurrentMonth && (
+                    <button
+                      onClick={() => setCalendarMonth(new Date(now.getFullYear(), now.getMonth(), 1))}
+                      className="text-[10px] text-[#0D9488] font-medium"
+                    >
+                      Today
+                    </button>
+                  )}
                 </div>
+                <button
+                  onClick={() => shiftMonth(1)}
+                  className="text-[#6B7280] px-2 py-1 text-sm"
+                  aria-label="Next month"
+                >
+                  {"\u203a"}
+                </button>
               </div>
-              <div className="grid grid-cols-7 gap-1 text-center">
+              <div className="flex items-center justify-end gap-3 text-[11px] text-[#9CA3AF] mb-3">
+                <span>{"\ud83d\udcaa"} fitness</span>
+                <span>{"\ud83c\udf7d\ufe0f"} food</span>
+              </div>
+              <div className={`grid grid-cols-7 gap-1 text-center ${monthLoading ? "opacity-50" : ""}`}>
                 {["S", "M", "T", "W", "T", "F", "S"].map((d, i) => (
                   <div key={i} className="text-[10px] text-[#9CA3AF] pb-1">
                     {d}

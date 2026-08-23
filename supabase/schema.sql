@@ -271,6 +271,9 @@ create table if not exists workouts (
   created_at timestamptz not null default now()
 );
 
+alter table workouts add column if not exists description text;
+alter table workouts add column if not exists archived boolean not null default false;
+
 create table if not exists workout_items (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users (id) on delete cascade,
@@ -472,3 +475,20 @@ alter table fitness_logs add column if not exists setting_2 text;
 alter table fitness_logs add column if not exists setting_3 text;
 
 alter table fitness_sets add column if not exists completed boolean not null default false;
+
+-- ---------------------------------------------------------------------------
+-- Fitness Tips
+-- ---------------------------------------------------------------------------
+
+create table if not exists fitness_tips (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users (id) on delete cascade,
+  content text not null,
+  created_at timestamptz not null default now()
+);
+
+alter table fitness_tips enable row level security;
+
+drop policy if exists "Users manage their own fitness tips" on fitness_tips;
+create policy "Users manage their own fitness tips"
+  on fitness_tips for all using (auth.uid() = user_id) with check (auth.uid() = user_id);

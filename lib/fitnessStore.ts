@@ -332,6 +332,8 @@ export async function fetchWorkouts(userId: string): Promise<WorkoutTemplate[]> 
   return workouts.map((w: any) => ({
     id: w.id,
     name: w.name,
+    description: w.description,
+    archived: !!w.archived,
     items: (items ?? [])
       .filter((it: any) => it.workout_id === w.id)
       .sort((a: any, b: any) => a.order_index - b.order_index)
@@ -339,31 +341,61 @@ export async function fetchWorkouts(userId: string): Promise<WorkoutTemplate[]> 
   }));
 }
 
-export async function createWorkout(
+async function replaceWorkoutItems(
   userId: string,
-  name: string,
+  workoutId: string,
   items: { category: FitnessCategory; typeName: string }[]
 ) {
-  const { data: workout, error } = await supabase
-    .from("workouts")
-    .insert({ user_id: userId, name })
-    .select()
-    .single();
-  if (error || !workout) {
-    console.error("Failed to create workout:", error?.message);
-    return;
-  }
+  await supabase.from("workout_items").delete().eq("workout_id", workoutId);
   if (items.length > 0) {
     await supabase.from("workout_items").insert(
       items.map((it, i) => ({
         user_id: userId,
-        workout_id: workout.id,
+        workout_id: workoutId,
         category: it.category,
         type_name: it.typeName,
         order_index: i,
       }))
     );
   }
+}
+
+export async function createWorkout(
+  userId: string,
+  name: string,
+  description: string | null,
+  items: { category: FitnessCategory; typeName: string }[]
+) {
+  const { data: workout, error } = await supabase
+    .from("workouts")
+    .insert({ user_id: userId, name, description })
+    .select()
+    .single();
+  if (error || !workout) {
+    console.error("Failed to create workout:", error?.message);
+    return;
+  }
+  await replaceWorkoutItems(userId, workout.id, items);
+}
+
+export async function updateWorkout(
+  userId: string,
+  workoutId: string,
+  name: string,
+  description: string | null,
+  items: { category: FitnessCategory; typeName: string }[]
+) {
+  const { error } = await supabase.from("workouts").update({ name, description }).eq("id", workoutId);
+  if (error) {
+    console.error("Failed to update workout:", error.message);
+    return;
+  }
+  await replaceWorkoutItems(userId, workoutId, items);
+}
+
+export async function setWorkoutArchived(id: string, archived: boolean) {
+  const { error } = await supabase.from("workouts").update({ archived }).eq("id", id);
+  if (error) console.error("Failed to update workout:", error.message);
 }
 
 export async function deleteWorkout(id: string) {

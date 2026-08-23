@@ -10,7 +10,6 @@ import {
   RecipeWithIngredients,
 } from "./types";
 import { FoodSearchResult } from "./usdaFoodData";
-import { NutritionixResult } from "./nutritionix";
 
 export const MEAL_SLOT_ORDER: MealSlot[] = [
   "breakfast",
@@ -164,28 +163,61 @@ export async function saveSearchResultAsFood(
   });
 }
 
-// Nutritionix already parses natural US household servings (e.g. "1 large
-// egg", "1 cup"), so unlike USDA we use its serving as-is instead of
-// normalizing everything to 100g.
-export async function saveNutritionixResultAsFood(
-  userId: string,
-  result: NutritionixResult
-): Promise<FoodItem | null> {
-  return createFoodItem(userId, {
-    name: result.name,
-    brand: result.brand,
-    servingQty: result.servingQty,
-    servingUnit: result.servingUnit,
-    calories: result.calories,
-    proteinG: result.proteinG,
-    fiberG: result.fiberG,
-    sugarG: result.sugarG,
-    fatG: result.fatG,
-    carbsG: result.carbsG,
-    sodiumMg: result.sodiumMg,
-    source: "nutritionix",
-    externalId: result.externalId || null,
-  });
+// A curated starter set of common foods in real US household servings
+// (each/cup/oz/tbsp/slice), so there's a usable library on day one without
+// depending on any external API. Values are standard reference figures,
+// not from a live lookup — close enough for everyday tracking, editable
+// afterward like any other library entry.
+const STARTER_FOODS: Omit<FoodItem, "id" | "source" | "externalId">[] = [
+  { name: "Large egg", brand: null, servingQty: 1, servingUnit: "each", calories: 72, proteinG: 6.3, fiberG: 0, sugarG: 0.2, fatG: 4.8, carbsG: 0.4, sodiumMg: 71 },
+  { name: "Banana", brand: null, servingQty: 1, servingUnit: "each", calories: 105, proteinG: 1.3, fiberG: 3.1, sugarG: 14, fatG: 0.4, carbsG: 27, sodiumMg: 1 },
+  { name: "Chicken breast, cooked", brand: null, servingQty: 3, servingUnit: "oz", calories: 165, proteinG: 31, fiberG: 0, sugarG: 0, fatG: 3.6, carbsG: 0, sodiumMg: 74 },
+  { name: "White rice, cooked", brand: null, servingQty: 1, servingUnit: "cup", calories: 205, proteinG: 4.3, fiberG: 0.6, sugarG: 0.1, fatG: 0.4, carbsG: 45, sodiumMg: 2 },
+  { name: "Brown rice, cooked", brand: null, servingQty: 1, servingUnit: "cup", calories: 216, proteinG: 5, fiberG: 3.5, sugarG: 0.7, fatG: 1.8, carbsG: 45, sodiumMg: 10 },
+  { name: "Whole wheat bread", brand: null, servingQty: 1, servingUnit: "slice", calories: 81, proteinG: 4, fiberG: 1.9, sugarG: 1.4, fatG: 1.1, carbsG: 13.8, sodiumMg: 144 },
+  { name: "White bread", brand: null, servingQty: 1, servingUnit: "slice", calories: 79, proteinG: 2.7, fiberG: 0.8, sugarG: 1.4, fatG: 1, carbsG: 14.6, sodiumMg: 152 },
+  { name: "2% milk", brand: null, servingQty: 1, servingUnit: "cup", calories: 122, proteinG: 8.1, fiberG: 0, sugarG: 12.3, fatG: 4.8, carbsG: 11.7, sodiumMg: 115 },
+  { name: "Greek yogurt, plain nonfat", brand: null, servingQty: 1, servingUnit: "cup", calories: 130, proteinG: 23, fiberG: 0, sugarG: 9, fatG: 0.7, carbsG: 9, sodiumMg: 82 },
+  { name: "Broccoli, cooked", brand: null, servingQty: 1, servingUnit: "cup", calories: 55, proteinG: 3.7, fiberG: 5.1, sugarG: 2.2, fatG: 0.6, carbsG: 11.2, sodiumMg: 64 },
+  { name: "Sweet potato, baked", brand: null, servingQty: 1, servingUnit: "each", calories: 103, proteinG: 2.3, fiberG: 3.8, sugarG: 7.4, fatG: 0.2, carbsG: 23.6, sodiumMg: 41 },
+  { name: "Avocado", brand: null, servingQty: 0.5, servingUnit: "each", calories: 114, proteinG: 1.3, fiberG: 4.6, sugarG: 0.2, fatG: 10.5, carbsG: 6, sodiumMg: 5 },
+  { name: "Almonds", brand: null, servingQty: 1, servingUnit: "oz", calories: 164, proteinG: 6, fiberG: 3.5, sugarG: 1.2, fatG: 14.2, carbsG: 6.1, sodiumMg: 0 },
+  { name: "Peanut butter", brand: null, servingQty: 2, servingUnit: "tbsp", calories: 188, proteinG: 8, fiberG: 1.9, sugarG: 3.4, fatG: 16.3, carbsG: 6.9, sodiumMg: 147 },
+  { name: "Salmon, cooked", brand: null, servingQty: 3, servingUnit: "oz", calories: 175, proteinG: 19, fiberG: 0, sugarG: 0, fatG: 10.5, carbsG: 0, sodiumMg: 50 },
+  { name: "Ground beef, 85% lean, cooked", brand: null, servingQty: 3, servingUnit: "oz", calories: 213, proteinG: 22, fiberG: 0, sugarG: 0, fatG: 13, carbsG: 0, sodiumMg: 68 },
+  { name: "Olive oil", brand: null, servingQty: 1, servingUnit: "tbsp", calories: 119, proteinG: 0, fiberG: 0, sugarG: 0, fatG: 13.5, carbsG: 0, sodiumMg: 0 },
+  { name: "Apple", brand: null, servingQty: 1, servingUnit: "each", calories: 95, proteinG: 0.5, fiberG: 4.4, sugarG: 19, fatG: 0.3, carbsG: 25, sodiumMg: 2 },
+  { name: "Orange", brand: null, servingQty: 1, servingUnit: "each", calories: 62, proteinG: 1.2, fiberG: 3.1, sugarG: 12.2, fatG: 0.2, carbsG: 15.4, sodiumMg: 0 },
+  { name: "Strawberries", brand: null, servingQty: 1, servingUnit: "cup", calories: 49, proteinG: 1, fiberG: 3, sugarG: 7.4, fatG: 0.5, carbsG: 11.7, sodiumMg: 2 },
+  { name: "Blueberries", brand: null, servingQty: 1, servingUnit: "cup", calories: 84, proteinG: 1.1, fiberG: 3.6, sugarG: 15, fatG: 0.5, carbsG: 21, sodiumMg: 1 },
+  { name: "Oatmeal, cooked", brand: null, servingQty: 1, servingUnit: "cup", calories: 166, proteinG: 5.9, fiberG: 4, sugarG: 0.6, fatG: 3.6, carbsG: 28, sodiumMg: 9 },
+  { name: "Cheddar cheese", brand: null, servingQty: 1, servingUnit: "oz", calories: 113, proteinG: 7, fiberG: 0, sugarG: 0.1, fatG: 9.3, carbsG: 0.4, sodiumMg: 174 },
+  { name: "Black beans, cooked", brand: null, servingQty: 1, servingUnit: "cup", calories: 227, proteinG: 15.2, fiberG: 15, sugarG: 0.6, fatG: 0.9, carbsG: 40.8, sodiumMg: 1 },
+  { name: "Pasta, cooked", brand: null, servingQty: 1, servingUnit: "cup", calories: 221, proteinG: 8.1, fiberG: 2.5, sugarG: 0.8, fatG: 1.3, carbsG: 43.2, sodiumMg: 1 },
+  { name: "Quinoa, cooked", brand: null, servingQty: 1, servingUnit: "cup", calories: 222, proteinG: 8.1, fiberG: 5.2, sugarG: 1.6, fatG: 3.6, carbsG: 39.4, sodiumMg: 13 },
+  { name: "Spinach, raw", brand: null, servingQty: 1, servingUnit: "cup", calories: 7, proteinG: 0.9, fiberG: 0.7, sugarG: 0.1, fatG: 0.1, carbsG: 1.1, sodiumMg: 24 },
+  { name: "Carrots, raw, chopped", brand: null, servingQty: 1, servingUnit: "cup", calories: 52, proteinG: 1.2, fiberG: 3.6, sugarG: 6, fatG: 0.3, carbsG: 12.3, sodiumMg: 88 },
+  { name: "Tomato", brand: null, servingQty: 1, servingUnit: "each", calories: 22, proteinG: 1.1, fiberG: 1.5, sugarG: 3.2, fatG: 0.2, carbsG: 4.8, sodiumMg: 6 },
+  { name: "Cucumber, sliced", brand: null, servingQty: 1, servingUnit: "cup", calories: 16, proteinG: 0.7, fiberG: 0.5, sugarG: 1.8, fatG: 0.1, carbsG: 3.8, sodiumMg: 2 },
+  { name: "Bell pepper", brand: null, servingQty: 1, servingUnit: "each", calories: 24, proteinG: 1, fiberG: 2.1, sugarG: 3.3, fatG: 0.2, carbsG: 5.5, sodiumMg: 3 },
+  { name: "Tofu, firm", brand: null, servingQty: 3, servingUnit: "oz", calories: 62, proteinG: 6.6, fiberG: 0.3, sugarG: 0.6, fatG: 3.8, carbsG: 1.5, sodiumMg: 6 },
+  { name: "Turkey breast, cooked", brand: null, servingQty: 3, servingUnit: "oz", calories: 125, proteinG: 26, fiberG: 0, sugarG: 0, fatG: 1.8, carbsG: 0, sodiumMg: 44 },
+  { name: "Shrimp, cooked", brand: null, servingQty: 3, servingUnit: "oz", calories: 84, proteinG: 20, fiberG: 0, sugarG: 0, fatG: 0.2, carbsG: 0, sodiumMg: 190 },
+  { name: "Butter", brand: null, servingQty: 1, servingUnit: "tbsp", calories: 102, proteinG: 0.1, fiberG: 0, sugarG: 0, fatG: 11.5, carbsG: 0, sodiumMg: 91 },
+  { name: "Whole milk", brand: null, servingQty: 1, servingUnit: "cup", calories: 149, proteinG: 7.7, fiberG: 0, sugarG: 12.3, fatG: 8, carbsG: 11.7, sodiumMg: 105 },
+  { name: "Bagel, plain", brand: null, servingQty: 1, servingUnit: "each", calories: 245, proteinG: 9.5, fiberG: 1.6, sugarG: 4, fatG: 1.5, carbsG: 47.7, sodiumMg: 430 },
+  { name: "Bacon, cooked", brand: null, servingQty: 2, servingUnit: "slice", calories: 86, proteinG: 5.9, fiberG: 0, sugarG: 0, fatG: 6.6, carbsG: 0.2, sodiumMg: 302 },
+  { name: "Hummus", brand: null, servingQty: 2, servingUnit: "tbsp", calories: 70, proteinG: 2, fiberG: 2, sugarG: 0.2, fatG: 5, carbsG: 4.5, sodiumMg: 130 },
+  { name: "Popcorn, air-popped", brand: null, servingQty: 1, servingUnit: "cup", calories: 31, proteinG: 1, fiberG: 1.2, sugarG: 0.1, fatG: 0.4, carbsG: 6.2, sodiumMg: 0 },
+];
+
+export async function importStarterFoods(userId: string): Promise<FoodItem[]> {
+  const created: FoodItem[] = [];
+  for (const f of STARTER_FOODS) {
+    const c = await createFoodItem(userId, { ...f, source: "manual", externalId: null });
+    if (c) created.push(c);
+  }
+  return created;
 }
 
 // Logging -----------------------------------------------------------------
