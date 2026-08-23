@@ -28,9 +28,17 @@ const DEFAULT_HEALTH_TRACKERS: { name: string; emoji: string }[] = [
   { name: "Headache", emoji: "\ud83e\udd15" },
   { name: "Period", emoji: "\ud83e\udea8" },
   { name: "Ovulation", emoji: "\ud83e\udd5a" },
+  { name: "Sick", emoji: "\ud83e\udd12" },
 ];
 
-const EMOJI_CHOICES = ["\u2b50", "\ud83d\ude0a", "\ud83d\ude34", "\ud83d\udcda", "\ud83d\udcb0", "\ud83c\udfa8", "\ud83d\udc8a", "\ud83c\udf1e", "\ud83d\udea8", "\ud83c\udfc6", "\ud83d\udc36", "\u2601\ufe0f"];
+const EMOJI_CHOICES = [
+  "\u2b50", "\ud83d\ude0a", "\ud83d\ude34", "\ud83d\udcda", "\ud83d\udcb0", "\ud83c\udfa8",
+  "\ud83d\udc8a", "\ud83c\udf1e", "\ud83d\udea8", "\ud83c\udfc6", "\ud83d\udc36", "\u2601\ufe0f",
+  "\ud83d\ude22", "\ud83d\ude21", "\ud83e\udd73", "\ud83d\udca7", "\ud83c\udfc3", "\ud83e\uddd8",
+  "\ud83e\udd12", "\ud83e\udd27", "\ud83e\udd75", "\ud83e\udd76", "\ud83d\ude37", "\ud83d\udc89",
+  "\ud83e\ude79", "\u2764\ufe0f", "\ud83c\udfaf", "\ud83c\udf19", "\ud83c\udf40", "\ud83c\udf89",
+  "\ud83d\udc31", "\ud83c\udf38", "\ud83d\udeb4", "\ud83c\udfcb\ufe0f", "\ud83d\ude0e", "\ud83d\ude2a",
+];
 
 function NewTrackerForm({ onCreate, onCancel }: { onCreate: (name: string, emoji: string) => void; onCancel: () => void }) {
   const [name, setName] = useState("");

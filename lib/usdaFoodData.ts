@@ -23,8 +23,29 @@ export interface FoodSearchResult {
   sodiumMg: number;
 }
 
-const NUTRIENT_NAMES: Record<string, keyof Omit<FoodSearchResult, "externalId" | "name" | "brand">> = {
+// USDA's nutrient NAME text isn't stable across data types — this is the
+// root cause of the "egg shows 0 calories/protein" bug. Foundation Foods
+// (which is where a plain "egg" search tends to land) don't report a bare
+// "Energy" nutrient at all; they report "Energy (Atwater General Factors)"
+// and "Energy (Atwater Specific Factors)" instead, so a name match on
+// "Energy" finds nothing and calories silently fall back to 0. nutrientNumber
+// is USDA's stable numeric ID and stays the same across every data type
+// (Foundation, SR Legacy, Branded), so match on that first.
+const NUTRIENT_NUMBER_MAP: Record<string, keyof Omit<FoodSearchResult, "externalId" | "name" | "brand">> = {
+  "208": "calories", // Energy (kcal) — NOT "268", which is Energy in kJ
+  "203": "proteinG",
+  "291": "fiberG",
+  "269": "sugarG", // Sugars, total
+  "204": "fatG", // Total lipid (fat)
+  "205": "carbsG", // Carbohydrate, by difference
+  "307": "sodiumMg", // Sodium, Na
+};
+
+// Fallback for the rare result missing nutrientNumber — matched by name.
+const NUTRIENT_NAME_FALLBACK: Record<string, keyof Omit<FoodSearchResult, "externalId" | "name" | "brand">> = {
   Energy: "calories",
+  "Energy (Atwater General Factors)": "calories",
+  "Energy (Atwater Specific Factors)": "calories",
   Protein: "proteinG",
   "Fiber, total dietary": "fiberG",
   "Sugars, total including NLEA": "sugarG",
@@ -78,7 +99,9 @@ export async function searchFoods(query: string): Promise<FoodSearchResult[]> {
       sodiumMg: 0,
     };
     for (const n of f.foodNutrients ?? []) {
-      const key = NUTRIENT_NAMES[n.nutrientName];
+      const key =
+        (n.nutrientNumber != null ? NUTRIENT_NUMBER_MAP[String(n.nutrientNumber)] : undefined) ??
+        NUTRIENT_NAME_FALLBACK[n.nutrientName];
       if (key) result[key] = num(n.value);
     }
     return result;

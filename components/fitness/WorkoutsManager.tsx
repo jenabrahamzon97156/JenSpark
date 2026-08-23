@@ -51,6 +51,16 @@ function WorkoutForm({
     setItems((prev) => [...prev, { category, typeName }]);
   };
 
+  const moveItem = (index: number, direction: -1 | 1) => {
+    setItems((prev) => {
+      const target = index + direction;
+      if (target < 0 || target >= prev.length) return prev;
+      const next = [...prev];
+      [next[index], next[target]] = [next[target], next[index]];
+      return next;
+    });
+  };
+
   return (
     <div className="rounded-lg border border-[#0D9488] bg-[#0D9488]/5 p-3 mb-3">
       <input
@@ -120,12 +130,30 @@ function WorkoutForm({
               <span className="text-[#1D2027]">
                 {i + 1}. {it.typeName} <span className="text-[#9CA3AF] text-xs">({CATEGORY_LABELS[it.category]})</span>
               </span>
-              <button
-                onClick={() => setItems((prev) => prev.filter((_, idx) => idx !== i))}
-                className="text-[#9CA3AF] hover:text-[#DC2626] text-xs"
-              >
-                Remove
-              </button>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  onClick={() => moveItem(i, -1)}
+                  disabled={i === 0}
+                  className="text-[#6B7280] hover:text-[#0D9488] disabled:opacity-30 disabled:hover:text-[#6B7280] text-xs px-1"
+                  aria-label="Move up"
+                >
+                  {"\u25b2"}
+                </button>
+                <button
+                  onClick={() => moveItem(i, 1)}
+                  disabled={i === items.length - 1}
+                  className="text-[#6B7280] hover:text-[#0D9488] disabled:opacity-30 disabled:hover:text-[#6B7280] text-xs px-1"
+                  aria-label="Move down"
+                >
+                  {"\u25bc"}
+                </button>
+                <button
+                  onClick={() => setItems((prev) => prev.filter((_, idx) => idx !== i))}
+                  className="text-[#9CA3AF] hover:text-[#DC2626] text-xs"
+                >
+                  Remove
+                </button>
+              </div>
             </div>
           ))}
         </div>
