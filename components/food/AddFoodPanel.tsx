@@ -370,20 +370,27 @@ export default function AddFoodPanel({
             placeholder="Filter your foods..."
             className="w-full mb-2 bg-[#F7F8FA] border border-[#E5E7EB] rounded-md px-3 py-2 text-sm text-[#1D2027] focus:outline-none focus:border-[#0D9488]"
           />
+          {myFoods.length === 0 ? (
+            <div className="text-center py-3 mb-2">
+              <p className="text-sm text-[#6B7280] mb-2">
+                No saved foods yet — add one manually, from Search, or start with a common-foods list.
+              </p>
+              <button
+                onClick={onImportStarterFoods}
+                className="text-xs px-3 py-1.5 rounded-full border border-[#0D9488] text-[#0D9488]"
+              >
+                Import common foods
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={onImportStarterFoods}
+              className="w-full mb-2 text-xs px-3 py-2 rounded-md border border-dashed border-[#D1D5DB] text-[#6B7280] hover:border-[#0D9488] hover:text-[#0D9488]"
+            >
+              + Import common foods (skips ones you already have)
+            </button>
+          )}
           <div className="flex flex-col gap-2 max-h-72 overflow-y-auto">
-            {myFoods.length === 0 && (
-              <div className="text-center py-3">
-                <p className="text-sm text-[#6B7280] mb-2">
-                  No saved foods yet — add one manually, from Search, or start with a common-foods list.
-                </p>
-                <button
-                  onClick={onImportStarterFoods}
-                  className="text-xs px-3 py-1.5 rounded-full border border-[#0D9488] text-[#0D9488]"
-                >
-                  Import ~40 common foods
-                </button>
-              </div>
-            )}
             {myFoods
               .filter((f) => f.name.toLowerCase().includes(myFoodsFilter.toLowerCase()))
               .map((f) =>
