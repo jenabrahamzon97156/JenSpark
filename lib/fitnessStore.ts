@@ -214,7 +214,7 @@ export async function createDefaultSets(
   logId: string,
   typeName: string
 ): Promise<FitnessSet[]> {
-  const last = await fetchLastSetsForType(userId, typeName);
+  const last = await fetchLastSetsForType(userId, typeName, logId);
   const created: FitnessSet[] = [];
   for (let i = 0; i < 3; i++) {
     const prior = last[i] ?? last[last.length - 1] ?? null;
@@ -224,14 +224,25 @@ export async function createDefaultSets(
   return created;
 }
 
-async function fetchLastSetsForType(userId: string, typeName: string): Promise<FitnessSet[]> {
+async function fetchLastSetsForType(
+  userId: string,
+  typeName: string,
+  excludeLogId: string
+): Promise<FitnessSet[]> {
+  // excludeLogId leaves out the log entry that's currently being created —
+  // without it, a same-day entry (which shares today's date with itself)
+  // could tie for "most recent" and match its own brand-new, still-empty
+  // row instead of the real last session. created_at as a secondary sort
+  // also makes the pick deterministic when two logs share the same date.
   const { data: lastLog } = await supabase
     .from("fitness_logs")
     .select("id")
     .eq("user_id", userId)
     .eq("category", "weightlifting")
     .eq("type_name", typeName)
+    .neq("id", excludeLogId)
     .order("date", { ascending: false })
+    .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
   if (!lastLog) return [];
