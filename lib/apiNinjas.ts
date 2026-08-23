@@ -44,17 +44,22 @@ export async function searchFoods(query: string): Promise<FoodSearchResult[]> {
   return items.map((f) => {
     const servingG = num(f.serving_size_g) || 100;
     const scale = 100 / servingG;
+    // Guard each field explicitly rather than relying on undefined * scale
+    // happening to coerce to 0 through num()'s NaN check — API Ninjas can
+    // omit fields for foods it has thin data on, and this keeps that
+    // distinguishable in future debugging instead of silently matching
+    // "genuinely zero."
     return {
       externalId: `${f.name}-${servingG}`,
       name: f.name ?? "Unknown food",
       brand: null,
-      calories: num(f.calories * scale),
-      proteinG: num(f.protein_g * scale),
-      fiberG: num(f.fiber_g * scale),
-      sugarG: num(f.sugar_g * scale),
-      fatG: num(f.fat_total_g * scale),
-      carbsG: num(f.carbohydrates_total_g * scale),
-      sodiumMg: num(f.sodium_mg * scale),
+      calories: num((f.calories ?? 0) * scale),
+      proteinG: num((f.protein_g ?? 0) * scale),
+      fiberG: num((f.fiber_g ?? 0) * scale),
+      sugarG: num((f.sugar_g ?? 0) * scale),
+      fatG: num((f.fat_total_g ?? 0) * scale),
+      carbsG: num((f.carbohydrates_total_g ?? 0) * scale),
+      sodiumMg: num((f.sodium_mg ?? 0) * scale),
     };
   });
 }

@@ -474,9 +474,10 @@ export default function FoodPage() {
               await deleteFoodItem(id);
             }}
             onImportStarterFoods={async () => {
-              if (!user) return;
+              if (!user) return 0;
               const imported = await importStarterFoods(user.id);
               setMyFoods((prev) => [...prev, ...imported]);
+              return imported.length;
             }}
           />
         )}

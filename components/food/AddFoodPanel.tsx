@@ -9,7 +9,6 @@ import { searchFoods as searchApiNinjas } from "@/lib/apiNinjas";
 import { MEAL_SLOT_LABELS, MEAL_SLOT_ORDER, sumFoods } from "@/lib/foodStore";
 
 type Tab = "search" | "myFoods" | "meals" | "recipes" | "manual";
-type Source = "usda" | "apininjas";
 
 function defaultMealSlot(): MealSlot {
   const hour = new Date().getHours();
@@ -56,6 +55,50 @@ function QuantityPicker({
   );
 }
 
+function SearchResultRow({
+  result,
+  sourceLabel,
+  picking,
+  onPick,
+  onConfirm,
+  onCancelPick,
+}: {
+  result: FoodSearchResult;
+  sourceLabel: string;
+  picking: boolean;
+  onPick: () => void;
+  onConfirm: (qty: number) => void;
+  onCancelPick: () => void;
+}) {
+  const looksEmpty =
+    result.calories === 0 && result.proteinG === 0 && result.fatG === 0 && result.carbsG === 0 && result.sodiumMg === 0;
+  return (
+    <div className="rounded-lg border border-[#E5E7EB] p-2.5">
+      <div className="flex items-center justify-between">
+        <div className="min-w-0">
+          <p className="text-sm text-[#1D2027] truncate">{result.name}</p>
+          <p className="text-xs text-[#6B7280]">
+            {result.brand ? `${result.brand} \u00b7 ` : ""}
+            {result.calories} kcal / 100g &middot; {result.proteinG}g protein
+          </p>
+          {looksEmpty && (
+            <p className="text-xs text-[#DC2626] mt-0.5">
+              All nutrients came back 0 — likely thin data from {sourceLabel}, not an actually zero-calorie food. Try
+              another section, a more specific search term, or edit the values after adding.
+            </p>
+          )}
+        </div>
+        <button onClick={onPick} className="shrink-0 text-xs px-3 py-1 rounded-full bg-[#0D9488] text-white">
+          Add
+        </button>
+      </div>
+      {picking && (
+        <QuantityPicker label="Servings of 100g" onConfirm={onConfirm} onCancel={onCancelPick} />
+      )}
+    </div>
+  );
+}
+
 function FoodEditForm({
   food,
   onSave,
@@ -78,6 +121,44 @@ function FoodEditForm({
     carbsG: String(food.carbsG),
     sodiumMg: String(food.sodiumMg),
   });
+
+  // Switching the unit alone (e.g. "g" -> "cup") would leave the nutrition
+  // numbers labeled for a serving they no longer describe. This lets the
+  // person tell us the gram-weight of both the current and new serving so
+  // every nutrient can be rescaled to match — not just relabeled.
+  const [showConvert, setShowConvert] = useState(false);
+  const [convertCurrentGrams, setConvertCurrentGrams] = useState(v.servingUnit === "g" ? v.servingQty : "");
+  const [convertNewQty, setConvertNewQty] = useState("1");
+  const [convertNewUnit, setConvertNewUnit] = useState("cup");
+  const [convertNewGrams, setConvertNewGrams] = useState("");
+  const [convertError, setConvertError] = useState<string | null>(null);
+  const currentIsGrams = v.servingUnit === "g";
+
+  const round1 = (n: number) => Math.round(n * 10) / 10;
+
+  const applyConversion = () => {
+    const currentG = currentIsGrams ? Number(v.servingQty) : Number(convertCurrentGrams);
+    const newG = Number(convertNewGrams);
+    if (!currentG || !newG) {
+      setConvertError("Enter the gram weight for both the current and new serving.");
+      return;
+    }
+    const scale = newG / currentG;
+    setV((prev) => ({
+      ...prev,
+      servingQty: convertNewQty || "1",
+      servingUnit: convertNewUnit,
+      calories: String(round1(Number(prev.calories) * scale)),
+      proteinG: String(round1(Number(prev.proteinG) * scale)),
+      fiberG: String(round1(Number(prev.fiberG) * scale)),
+      sugarG: String(round1(Number(prev.sugarG) * scale)),
+      fatG: String(round1(Number(prev.fatG) * scale)),
+      carbsG: String(round1(Number(prev.carbsG) * scale)),
+      sodiumMg: String(round1(Number(prev.sodiumMg) * scale)),
+    }));
+    setConvertError(null);
+    setShowConvert(false);
+  };
 
   return (
     <div className="rounded-lg border border-[#0D9488] bg-[#0D9488]/5 p-3">
@@ -107,6 +188,90 @@ function FoodEditForm({
           ))}
         </select>
       </div>
+
+      {!showConvert ? (
+        <button
+          type="button"
+          onClick={() => setShowConvert(true)}
+          className="text-xs text-[#0D9488] font-medium mb-2"
+        >
+          Convert measurement (e.g. grams &rarr; cups)
+        </button>
+      ) : (
+        <div className="bg-white border border-[#E5E7EB] rounded-md p-2.5 mb-2">
+          <p className="text-[11px] text-[#6B7280] mb-2">
+            Tell us the gram weight of the current and new serving, and we'll rescale the nutrition to match instead
+            of just relabeling it.
+          </p>
+          {!currentIsGrams && (
+            <div className="mb-2">
+              <label className="text-[10px] text-[#6B7280]">
+                Current serving ({v.servingQty} {v.servingUnit}) equals how many grams?
+              </label>
+              <input
+                type="number"
+                value={convertCurrentGrams}
+                onChange={(e) => setConvertCurrentGrams(e.target.value)}
+                placeholder="e.g. 240"
+                className="w-full mt-0.5 bg-[#F7F8FA] border border-[#E5E7EB] rounded-md px-2 py-1.5 text-xs text-[#1D2027]"
+              />
+            </div>
+          )}
+          <div className="grid grid-cols-2 gap-2 mb-2">
+            <input
+              type="number"
+              value={convertNewQty}
+              onChange={(e) => setConvertNewQty(e.target.value)}
+              placeholder="New qty"
+              className="min-w-0 bg-[#F7F8FA] border border-[#E5E7EB] rounded-md px-2 py-1.5 text-xs text-[#1D2027]"
+            />
+            <select
+              value={convertNewUnit}
+              onChange={(e) => setConvertNewUnit(e.target.value)}
+              className="min-w-0 bg-[#F7F8FA] border border-[#E5E7EB] rounded-md px-2 py-1.5 text-xs text-[#1D2027]"
+            >
+              {["each", "cup", "tbsp", "tsp", "oz", "slice", "piece", "scoop", "bar", "g", "ml"].map((u) => (
+                <option key={u} value={u}>
+                  {u}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="mb-2">
+            <label className="text-[10px] text-[#6B7280]">
+              New serving ({convertNewQty || "1"} {convertNewUnit}) equals how many grams?
+            </label>
+            <input
+              type="number"
+              value={convertNewGrams}
+              onChange={(e) => setConvertNewGrams(e.target.value)}
+              placeholder="e.g. 195"
+              className="w-full mt-0.5 bg-[#F7F8FA] border border-[#E5E7EB] rounded-md px-2 py-1.5 text-xs text-[#1D2027]"
+            />
+          </div>
+          {convertError && <p className="text-[11px] text-[#DC2626] mb-2">{convertError}</p>}
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={applyConversion}
+              className="flex-1 rounded-md bg-[#0D9488] text-white text-xs font-medium py-1.5"
+            >
+              Apply conversion
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setShowConvert(false);
+                setConvertError(null);
+              }}
+              className="px-3 rounded-md border border-[#E5E7EB] text-xs text-[#6B7280]"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-3 gap-2 mb-2">
         <input type="number" value={v.calories} onChange={(e) => setV({ ...v, calories: e.target.value })} placeholder="Calories" className="min-w-0 bg-white border border-[#E5E7EB] rounded-md px-2 py-1.5 text-xs text-[#1D2027]" />
         <input type="number" value={v.proteinG} onChange={(e) => setV({ ...v, proteinG: e.target.value })} placeholder="Protein g" className="min-w-0 bg-white border border-[#E5E7EB] rounded-md px-2 py-1.5 text-xs text-[#1D2027]" />
@@ -178,23 +343,27 @@ export default function AddFoodPanel({
   onCreateManualFood: (food: Omit<FoodItem, "id">, mealSlot: MealSlot, notes: string | null) => void;
   onUpdateFood: (id: string, food: Omit<FoodItem, "id">) => void;
   onDeleteFood: (id: string) => void;
-  onImportStarterFoods: () => void;
+  onImportStarterFoods: () => Promise<number>;
   onClose: () => void;
 }) {
   const [tab, setTab] = useState<Tab>("search");
   const [mealSlot, setMealSlot] = useState<MealSlot>(defaultMealSlot());
   const [notes, setNotes] = useState("");
-  const [source, setSource] = useState<Source>("apininjas");
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<FoodSearchResult[]>([]);
-  const [searching, setSearching] = useState(false);
-  const [searchError, setSearchError] = useState<string | null>(null);
+  const [submittedQuery, setSubmittedQuery] = useState("");
   const [hasSearched, setHasSearched] = useState(false);
+  const [usdaResults, setUsdaResults] = useState<FoodSearchResult[]>([]);
+  const [usdaSearching, setUsdaSearching] = useState(false);
+  const [usdaError, setUsdaError] = useState<string | null>(null);
+  const [ninjaResults, setNinjaResults] = useState<FoodSearchResult[]>([]);
+  const [ninjaSearching, setNinjaSearching] = useState(false);
+  const [ninjaError, setNinjaError] = useState<string | null>(null);
   const [pickingFood, setPickingFood] = useState<FoodItem | null>(null);
   const [pickingResult, setPickingResult] = useState<FoodSearchResult | null>(null);
   const [pickingRecipe, setPickingRecipe] = useState<RecipeWithIngredients | null>(null);
   const [editingFoodId, setEditingFoodId] = useState<string | null>(null);
   const [myFoodsFilter, setMyFoodsFilter] = useState("");
+  const [importMessage, setImportMessage] = useState<string | null>(null);
 
   const [manual, setManual] = useState({
     name: "",
@@ -209,19 +378,48 @@ export default function AddFoodPanel({
     sodiumMg: "",
   });
 
-  const runSearch = async () => {
-    if (!query.trim()) return;
-    setSearching(true);
-    setSearchError(null);
+  // Searches My Foods (local, instant), USDA, and API Ninjas at once, each
+  // shown in its own section below — so a missing/incomplete result from
+  // one source doesn't hide what the others found.
+  const runSearch = () => {
+    const q = query.trim();
+    if (!q) return;
+    setSubmittedQuery(q);
     setHasSearched(true);
-    try {
-      const r = await (source === "usda" ? searchUsda(query) : searchApiNinjas(query));
-      setResults(r);
-    } catch (e) {
-      setResults([]);
-      setSearchError(e instanceof Error ? e.message : "Couldn't reach the food database. Check your connection and try again.");
-    }
-    setSearching(false);
+
+    setUsdaSearching(true);
+    setUsdaError(null);
+    searchUsda(q)
+      .then(setUsdaResults)
+      .catch((e) => {
+        setUsdaResults([]);
+        setUsdaError(e instanceof Error ? e.message : "Couldn't reach USDA. Check your connection and try again.");
+      })
+      .finally(() => setUsdaSearching(false));
+
+    setNinjaSearching(true);
+    setNinjaError(null);
+    searchApiNinjas(q)
+      .then(setNinjaResults)
+      .catch((e) => {
+        setNinjaResults([]);
+        setNinjaError(e instanceof Error ? e.message : "Couldn't reach API Ninjas. Check your connection and try again.");
+      })
+      .finally(() => setNinjaSearching(false));
+  };
+
+  const myFoodMatches = submittedQuery
+    ? myFoods.filter((f) => f.name.toLowerCase().includes(submittedQuery.toLowerCase()))
+    : [];
+
+  const handleImport = async () => {
+    setImportMessage("Importing...");
+    const count = await onImportStarterFoods();
+    setImportMessage(
+      count > 0
+        ? `Added ${count} new food${count === 1 ? "" : "s"} to your library.`
+        : "You already have all the common foods in your library."
+    );
   };
 
   const tabs: { id: Tab; label: string }[] = [
@@ -279,7 +477,7 @@ export default function AddFoodPanel({
 
       {tab === "search" && (
         <div>
-          <div className="flex gap-2 mb-3">
+          <div className="flex gap-2 mb-4">
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
@@ -291,74 +489,123 @@ export default function AddFoodPanel({
               Go
             </button>
           </div>
-          <div className="flex gap-1.5 mb-3">
-            <button
-              onClick={() => setSource("apininjas")}
-              className={`text-[11px] px-2.5 py-1 rounded-full border ${
-                source === "apininjas" ? "bg-[#1D2027] text-white border-[#1D2027]" : "border-[#E5E7EB] text-[#6B7280]"
-              }`}
-            >
-              API Ninjas
-            </button>
-            <button
-              onClick={() => setSource("usda")}
-              className={`text-[11px] px-2.5 py-1 rounded-full border ${
-                source === "usda" ? "bg-[#1D2027] text-white border-[#1D2027]" : "border-[#E5E7EB] text-[#6B7280]"
-              }`}
-            >
-              USDA (general foods)
-            </button>
-          </div>
-          {searching && <p className="text-sm text-[#6B7280]">Searching...</p>}
-          {searchError && <p className="text-sm text-[#DC2626] mb-2">{searchError}</p>}
-          <div className="flex flex-col gap-2 max-h-72 overflow-y-auto">
-            {results.map((r, i) => (
-              <div key={i} className="rounded-lg border border-[#E5E7EB] p-2.5">
-                <div className="flex items-center justify-between">
-                  <div className="min-w-0">
-                    <p className="text-sm text-[#1D2027] truncate">{r.name}</p>
-                    <p className="text-xs text-[#6B7280]">
-                      {r.brand ? `${r.brand} \u00b7 ` : ""}
-                      {r.calories} kcal / 100g &middot; {r.proteinG}g protein
-                    </p>
+
+          {hasSearched && (
+            <div className="flex flex-col gap-4 max-h-96 overflow-y-auto">
+              {/* My Foods — local library, no network call, so it's instant */}
+              <div>
+                <p className="text-[11px] font-medium text-[#6B7280] uppercase tracking-wide mb-1.5">My Foods</p>
+                {myFoodMatches.length === 0 ? (
+                  <p className="text-xs text-[#9CA3AF]">No matches in your library.</p>
+                ) : (
+                  <div className="flex flex-col gap-2">
+                    {myFoodMatches.map((f) => (
+                      <div key={f.id} className="rounded-lg border border-[#E5E7EB] p-2.5">
+                        <div className="flex items-center justify-between">
+                          <div className="min-w-0">
+                            <p className="text-sm text-[#1D2027] truncate">{f.name}</p>
+                            <p className="text-xs text-[#6B7280]">
+                              {f.calories} kcal per {f.servingQty} {f.servingUnit}
+                            </p>
+                          </div>
+                          <button
+                            onClick={() => setPickingFood(f)}
+                            className="shrink-0 text-xs px-3 py-1 rounded-full bg-[#0D9488] text-white"
+                          >
+                            Add
+                          </button>
+                        </div>
+                        {pickingFood?.id === f.id && (
+                          <QuantityPicker
+                            label={`Servings (1 = ${f.servingQty} ${f.servingUnit})`}
+                            onConfirm={(qty) => {
+                              onLogFood(f, qty, mealSlot, notes || null);
+                              setPickingFood(null);
+                            }}
+                            onCancel={() => setPickingFood(null)}
+                          />
+                        )}
+                      </div>
+                    ))}
                   </div>
-                  <button
-                    onClick={() => setPickingResult(r)}
-                    className="shrink-0 text-xs px-3 py-1 rounded-full bg-[#0D9488] text-white"
-                  >
-                    Add
-                  </button>
-                </div>
-                {pickingResult === r && (
-                  <QuantityPicker
-                    label="Servings of 100g"
-                    onConfirm={async (qty) => {
-                      const saved = await onSaveSearchResult(r);
-                      if (saved) onLogFood(saved, qty, mealSlot, notes || null);
-                      setPickingResult(null);
-                    }}
-                    onCancel={() => setPickingResult(null)}
-                  />
                 )}
               </div>
-            ))}
-            {hasSearched && !searching && !searchError && results.length === 0 && (
-              <div className="text-center py-3">
-                <p className="text-sm text-[#6B7280] mb-2">
-                  No results in {source === "usda" ? "USDA" : "API Ninjas"}.
+
+              {/* USDA */}
+              <div>
+                <p className="text-[11px] font-medium text-[#6B7280] uppercase tracking-wide mb-1.5">
+                  USDA (general foods)
                 </p>
-                <button
-                  onClick={() => {
-                    setManual((m) => ({ ...m, name: query }));
-                    setTab("manual");
-                  }}
-                  className="text-xs text-[#0D9488] font-medium"
-                >
-                  Can't find it? Add "{query}" manually
-                </button>
+                {usdaSearching && <p className="text-xs text-[#6B7280]">Searching...</p>}
+                {usdaError && <p className="text-xs text-[#DC2626] mb-1">{usdaError}</p>}
+                {!usdaSearching && !usdaError && usdaResults.length === 0 && (
+                  <p className="text-xs text-[#9CA3AF]">No results in USDA.</p>
+                )}
+                <div className="flex flex-col gap-2">
+                  {usdaResults.map((r, i) => (
+                    <SearchResultRow
+                      key={i}
+                      result={r}
+                      sourceLabel="USDA"
+                      picking={pickingResult === r}
+                      onPick={() => setPickingResult(r)}
+                      onConfirm={async (qty) => {
+                        const saved = await onSaveSearchResult(r);
+                        if (saved) onLogFood(saved, qty, mealSlot, notes || null);
+                        setPickingResult(null);
+                      }}
+                      onCancelPick={() => setPickingResult(null)}
+                    />
+                  ))}
+                </div>
               </div>
-            )}
-          </div>
+
+              {/* API Ninjas */}
+              <div>
+                <p className="text-[11px] font-medium text-[#6B7280] uppercase tracking-wide mb-1.5">API Ninjas</p>
+                {ninjaSearching && <p className="text-xs text-[#6B7280]">Searching...</p>}
+                {ninjaError && <p className="text-xs text-[#DC2626] mb-1">{ninjaError}</p>}
+                {!ninjaSearching && !ninjaError && ninjaResults.length === 0 && (
+                  <p className="text-xs text-[#9CA3AF]">No results in API Ninjas.</p>
+                )}
+                <div className="flex flex-col gap-2">
+                  {ninjaResults.map((r, i) => (
+                    <SearchResultRow
+                      key={i}
+                      result={r}
+                      sourceLabel="API Ninjas"
+                      picking={pickingResult === r}
+                      onPick={() => setPickingResult(r)}
+                      onConfirm={async (qty) => {
+                        const saved = await onSaveSearchResult(r);
+                        if (saved) onLogFood(saved, qty, mealSlot, notes || null);
+                        setPickingResult(null);
+                      }}
+                      onCancelPick={() => setPickingResult(null)}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              {!usdaSearching &&
+                !ninjaSearching &&
+                myFoodMatches.length === 0 &&
+                usdaResults.length === 0 &&
+                ninjaResults.length === 0 && (
+                  <div className="text-center py-1">
+                    <button
+                      onClick={() => {
+                        setManual((m) => ({ ...m, name: query }));
+                        setTab("manual");
+                      }}
+                      className="text-xs text-[#0D9488] font-medium"
+                    >
+                      Can't find it? Add "{submittedQuery}" manually
+                    </button>
+                  </div>
+                )}
+            </div>
+          )}
         </div>
       )}
 
@@ -376,7 +623,7 @@ export default function AddFoodPanel({
                 No saved foods yet — add one manually, from Search, or start with a common-foods list.
               </p>
               <button
-                onClick={onImportStarterFoods}
+                onClick={handleImport}
                 className="text-xs px-3 py-1.5 rounded-full border border-[#0D9488] text-[#0D9488]"
               >
                 Import common foods
@@ -384,12 +631,13 @@ export default function AddFoodPanel({
             </div>
           ) : (
             <button
-              onClick={onImportStarterFoods}
+              onClick={handleImport}
               className="w-full mb-2 text-xs px-3 py-2 rounded-md border border-dashed border-[#D1D5DB] text-[#6B7280] hover:border-[#0D9488] hover:text-[#0D9488]"
             >
               + Import common foods (skips ones you already have)
             </button>
           )}
+          {importMessage && <p className="text-xs text-[#0D9488] mb-2">{importMessage}</p>}
           <div className="flex flex-col gap-2 max-h-72 overflow-y-auto">
             {myFoods
               .filter((f) => f.name.toLowerCase().includes(myFoodsFilter.toLowerCase()))
