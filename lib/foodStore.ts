@@ -448,6 +448,43 @@ export async function deleteLogEntry(id: string) {
   if (error) console.error("Failed to delete log entry:", error.message);
 }
 
+// Used both for moving an entry to a different meal slot (dinner -> breakfast)
+// and for changing its logged quantity. Quantity/nutrition changes are
+// computed by the caller (via scaleFood against the original food item, when
+// available) and passed in here as a flat patch — this function just writes
+// whatever fields are given.
+export async function updateLogEntry(
+  id: string,
+  patch: Partial<{
+    quantity: number;
+    calories: number;
+    proteinG: number;
+    fiberG: number;
+    sugarG: number;
+    fatG: number;
+    carbsG: number;
+    sodiumMg: number;
+    mealSlot: MealSlot;
+    servingLabel: string | null;
+    notes: string | null;
+  }>
+) {
+  const dbPatch: Record<string, any> = {};
+  if ("quantity" in patch) dbPatch.quantity = patch.quantity;
+  if ("calories" in patch) dbPatch.calories = patch.calories;
+  if ("proteinG" in patch) dbPatch.protein_g = patch.proteinG;
+  if ("fiberG" in patch) dbPatch.fiber_g = patch.fiberG;
+  if ("sugarG" in patch) dbPatch.sugar_g = patch.sugarG;
+  if ("fatG" in patch) dbPatch.fat_g = patch.fatG;
+  if ("carbsG" in patch) dbPatch.carbs_g = patch.carbsG;
+  if ("sodiumMg" in patch) dbPatch.sodium_mg = patch.sodiumMg;
+  if ("mealSlot" in patch) dbPatch.meal_slot = patch.mealSlot;
+  if ("servingLabel" in patch) dbPatch.serving_label = patch.servingLabel;
+  if ("notes" in patch) dbPatch.notes = patch.notes;
+  const { error } = await supabase.from("food_logs").update(dbPatch).eq("id", id);
+  if (error) console.error("Failed to update log entry:", error.message);
+}
+
 // Meals ---------------------------------------------------------------------
 
 export async function fetchMeals(userId: string): Promise<MealWithItems[]> {

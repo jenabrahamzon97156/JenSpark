@@ -77,7 +77,15 @@ export async function searchFoods(query: string): Promise<FoodSearchResult[]> {
   const res = await fetch(url);
   if (!res.ok) {
     if (res.status === 403) throw new Error("USDA API key looks invalid — double check .env.local.");
-    throw new Error("Food search failed");
+    if (res.status === 429) throw new Error("USDA API rate limit hit — wait a bit and try again, or switch to API Ninjas.");
+    let detail = "";
+    try {
+      const body = await res.json();
+      detail = body?.error?.message || body?.message || "";
+    } catch {
+      // response wasn't JSON — ignore, we'll just show the status code
+    }
+    throw new Error(`Food search failed (USDA returned ${res.status}${detail ? `: ${detail}` : ""}).`);
   }
   const data = await res.json();
 
