@@ -59,29 +59,48 @@ function round1(n: number) {
   return Math.round(n * 10) / 10;
 }
 
-export type SearchAddPick =
-  | { mode: "grams"; qty: number }
-  | { mode: "custom"; qty: number; unit: string; gramsPerUnit: number };
+export type QuantityPick =
+  | { mode: "base"; qty: number }
+  | { mode: "custom"; qty: number; unit: string; newGrams: number; baseGrams: number };
 
-function SearchQuantityPicker({ onConfirm, onCancel }: { onConfirm: (pick: SearchAddPick) => void; onCancel: () => void }) {
-  const [mode, setMode] = useState<"grams" | "custom">("grams");
-  const [gramsQty, setGramsQty] = useState("1");
+// Used anywhere a food gets logged: search results (base = 100g) and My
+// Foods items (base = whatever serving that food is stored in, e.g. "1
+// cup"). "Servings of {base}" is the quick path — just a multiplier.
+// "Different measurement" lets the person log in a unit that has nothing to
+// do with the stored serving (e.g. tablespoons for a food stored in cups)
+// by asking for the gram-weight of both servings and scaling between them.
+function MeasurementQuantityPicker({
+  baseQty,
+  baseUnit,
+  onConfirm,
+  onCancel,
+}: {
+  baseQty: number;
+  baseUnit: string;
+  onConfirm: (pick: QuantityPick) => void;
+  onCancel: () => void;
+}) {
+  const baseIsGrams = baseUnit === "g";
+  const [mode, setMode] = useState<"base" | "custom">("base");
+  const [baseServings, setBaseServings] = useState("1");
   const [customQty, setCustomQty] = useState("1");
   const [customUnit, setCustomUnit] = useState("cup");
-  const [customGrams, setCustomGrams] = useState("");
+  const [baseGrams, setBaseGrams] = useState(baseIsGrams ? String(baseQty) : "");
+  const [newGrams, setNewGrams] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   const confirm = () => {
-    if (mode === "grams") {
-      onConfirm({ mode: "grams", qty: Number(gramsQty) || 1 });
+    if (mode === "base") {
+      onConfirm({ mode: "base", qty: Number(baseServings) || 1 });
       return;
     }
-    const grams = Number(customGrams);
-    if (!grams) {
-      setError("Enter how many grams that measurement equals.");
+    const bg = baseIsGrams ? baseQty : Number(baseGrams);
+    const ng = Number(newGrams);
+    if (!bg || !ng) {
+      setError("Enter the gram weight for both the current and new serving.");
       return;
     }
-    onConfirm({ mode: "custom", qty: Number(customQty) || 1, unit: customUnit, gramsPerUnit: grams });
+    onConfirm({ mode: "custom", qty: Number(customQty) || 1, unit: customUnit, newGrams: ng, baseGrams: bg });
   };
 
   return (
@@ -89,12 +108,12 @@ function SearchQuantityPicker({ onConfirm, onCancel }: { onConfirm: (pick: Searc
       <div className="flex gap-1.5 mb-2">
         <button
           type="button"
-          onClick={() => setMode("grams")}
+          onClick={() => setMode("base")}
           className={`text-[11px] px-2.5 py-1 rounded-full border ${
-            mode === "grams" ? "bg-[#1D2027] text-white border-[#1D2027]" : "border-[#E5E7EB] text-[#6B7280]"
+            mode === "base" ? "bg-[#1D2027] text-white border-[#1D2027]" : "border-[#E5E7EB] text-[#6B7280]"
           }`}
         >
-          Servings of 100g
+          Servings of {baseQty} {baseUnit}
         </button>
         <button
           type="button"
@@ -107,13 +126,13 @@ function SearchQuantityPicker({ onConfirm, onCancel }: { onConfirm: (pick: Searc
         </button>
       </div>
 
-      {mode === "grams" ? (
+      {mode === "base" ? (
         <div className="flex gap-2">
           <input
             type="number"
             inputMode="decimal"
-            value={gramsQty}
-            onChange={(e) => setGramsQty(e.target.value)}
+            value={baseServings}
+            onChange={(e) => setBaseServings(e.target.value)}
             className="flex-1 min-w-0 bg-white border border-[#E5E7EB] rounded-md px-2 py-2 text-sm font-mono text-[#1D2027] focus:outline-none focus:border-[#0D9488]"
           />
           <button onClick={confirm} className="px-4 rounded-md bg-[#0D9488] text-white text-sm font-medium">
@@ -125,6 +144,20 @@ function SearchQuantityPicker({ onConfirm, onCancel }: { onConfirm: (pick: Searc
         </div>
       ) : (
         <div>
+          {!baseIsGrams && (
+            <div className="mb-2">
+              <label className="text-[10px] text-[#6B7280]">
+                Current serving ({baseQty} {baseUnit}) equals how many grams?
+              </label>
+              <input
+                type="number"
+                value={baseGrams}
+                onChange={(e) => setBaseGrams(e.target.value)}
+                placeholder="e.g. 195"
+                className="w-full mt-0.5 bg-white border border-[#E5E7EB] rounded-md px-2 py-1.5 text-sm text-[#1D2027]"
+              />
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-2 mb-2">
             <input
               type="number"
@@ -138,7 +171,7 @@ function SearchQuantityPicker({ onConfirm, onCancel }: { onConfirm: (pick: Searc
               onChange={(e) => setCustomUnit(e.target.value)}
               className="min-w-0 bg-white border border-[#E5E7EB] rounded-md px-2 py-2 text-sm text-[#1D2027]"
             >
-              {["each", "cup", "tbsp", "tsp", "oz", "slice", "piece", "scoop", "bar", "ml"].map((u) => (
+              {["each", "cup", "tbsp", "tsp", "oz", "slice", "piece", "scoop", "bar", "g", "ml"].map((u) => (
                 <option key={u} value={u}>
                   {u}
                 </option>
@@ -150,9 +183,9 @@ function SearchQuantityPicker({ onConfirm, onCancel }: { onConfirm: (pick: Searc
           </label>
           <input
             type="number"
-            value={customGrams}
-            onChange={(e) => setCustomGrams(e.target.value)}
-            placeholder="e.g. 195"
+            value={newGrams}
+            onChange={(e) => setNewGrams(e.target.value)}
+            placeholder="e.g. 30"
             className="w-full mt-0.5 mb-2 bg-white border border-[#E5E7EB] rounded-md px-2 py-1.5 text-sm text-[#1D2027]"
           />
           {error && <p className="text-[11px] text-[#DC2626] mb-2">{error}</p>}
@@ -183,7 +216,7 @@ function SearchResultRow({
   sourceLabel: string;
   picking: boolean;
   onPick: () => void;
-  onConfirm: (pick: SearchAddPick, existing: FoodItem | null) => void;
+  onConfirm: (pick: QuantityPick, existing: FoodItem | null) => void;
   onCancelPick: () => void;
   onSaveOnly: () => Promise<FoodItem | null>;
 }) {
@@ -233,7 +266,14 @@ function SearchResultRow({
           </button>
         </div>
       </div>
-      {picking && <SearchQuantityPicker onConfirm={(pick) => onConfirm(pick, savedFood)} onCancel={onCancelPick} />}
+      {picking && (
+        <MeasurementQuantityPicker
+          baseQty={100}
+          baseUnit="g"
+          onConfirm={(pick) => onConfirm(pick, savedFood)}
+          onCancel={onCancelPick}
+        />
+      )}
     </div>
   );
 }
@@ -476,6 +516,22 @@ export default function AddFoodPanel({
   meals: MealWithItems[];
   recipes: RecipeWithIngredients[];
   onLogFood: (food: FoodItem, quantity: number, mealSlot: MealSlot, notes: string | null) => void;
+  onLogFoodCustom: (
+    food: FoodItem,
+    custom: {
+      qty: number;
+      unit: string;
+      calories: number;
+      proteinG: number;
+      fiberG: number;
+      sugarG: number;
+      fatG: number;
+      carbsG: number;
+      sodiumMg: number;
+    },
+    mealSlot: MealSlot,
+    notes: string | null
+  ) => void;
   onLogMeal: (meal: MealWithItems, mealSlot: MealSlot, notes: string | null) => void;
   onLogRecipe: (recipe: RecipeWithIngredients, servingsEaten: number, mealSlot: MealSlot, notes: string | null) => void;
   onSaveSearchResult: (result: FoodSearchResult) => Promise<FoodItem | null>;
@@ -566,18 +622,47 @@ export default function AddFoodPanel({
   // measurement (e.g. "1 cup = 195g") instead of plain 100g servings, the
   // saved food is rewritten to that unit — with every nutrient rescaled to
   // match — so it shows up in cups (not grams) from now on too.
-  const handleSearchAdd = async (result: FoodSearchResult, pick: SearchAddPick, existing: FoodItem | null) => {
+  // Logging a My Foods item: "base" mode is the existing servings-multiplier
+  // behavior (unchanged). "custom" mode lets the person log in a unit that
+  // has nothing to do with the food's stored serving — the scaled nutrients
+  // are computed here and logged as a one-off snapshot; it doesn't rewrite
+  // the food's own stored unit (use My Foods -> Edit for that).
+  const handleMyFoodAdd = (food: FoodItem, pick: QuantityPick) => {
+    if (pick.mode === "base") {
+      onLogFood(food, pick.qty, mealSlot, notes || null);
+      return;
+    }
+    const scale = pick.newGrams / pick.baseGrams;
+    onLogFoodCustom(
+      food,
+      {
+        qty: pick.qty,
+        unit: pick.unit,
+        calories: round1(food.calories * scale),
+        proteinG: round1(food.proteinG * scale),
+        fiberG: round1(food.fiberG * scale),
+        sugarG: round1(food.sugarG * scale),
+        fatG: round1(food.fatG * scale),
+        carbsG: round1(food.carbsG * scale),
+        sodiumMg: round1(food.sodiumMg * scale),
+      },
+      mealSlot,
+      notes || null
+    );
+  };
+
+  const handleSearchAdd = async (result: FoodSearchResult, pick: QuantityPick, existing: FoodItem | null) => {
     const saved = existing ?? (await onSaveSearchResult(result));
     if (!saved) {
       setPickingResult(null);
       return;
     }
-    if (pick.mode === "grams") {
+    if (pick.mode === "base") {
       onLogFood(saved, pick.qty, mealSlot, notes || null);
       setPickingResult(null);
       return;
     }
-    const scale = pick.gramsPerUnit / 100;
+    const scale = pick.newGrams / pick.baseGrams;
     const converted = {
       name: saved.name,
       brand: saved.brand,
@@ -692,10 +777,11 @@ export default function AddFoodPanel({
                           </button>
                         </div>
                         {pickingFood?.id === f.id && (
-                          <QuantityPicker
-                            label={`Servings (1 = ${f.servingQty} ${f.servingUnit})`}
-                            onConfirm={(qty) => {
-                              onLogFood(f, qty, mealSlot, notes || null);
+                          <MeasurementQuantityPicker
+                            baseQty={f.servingQty}
+                            baseUnit={f.servingUnit}
+                            onConfirm={(pick) => {
+                              handleMyFoodAdd(f, pick);
                               setPickingFood(null);
                             }}
                             onCancel={() => setPickingFood(null)}
@@ -850,10 +936,11 @@ export default function AddFoodPanel({
                       </div>
                     </div>
                     {pickingFood?.id === f.id && (
-                      <QuantityPicker
-                        label={`Servings (1 = ${f.servingQty} ${f.servingUnit})`}
-                        onConfirm={(qty) => {
-                          onLogFood(f, qty, mealSlot, notes || null);
+                      <MeasurementQuantityPicker
+                        baseQty={f.servingQty}
+                        baseUnit={f.servingUnit}
+                        onConfirm={(pick) => {
+                          handleMyFoodAdd(f, pick);
                           setPickingFood(null);
                         }}
                         onCancel={() => setPickingFood(null)}

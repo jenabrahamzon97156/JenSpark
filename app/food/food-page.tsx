@@ -31,6 +31,7 @@ import {
   saveSearchResultAsFood,
   importStarterFoods,
   scaleFood,
+  updateLogEntry,
 } from "@/lib/foodStore";
 
 function ProgressBar({ label, value, goal, unit }: { label: string; value: number; goal: number; unit: string }) {
@@ -45,6 +46,92 @@ function ProgressBar({ label, value, goal, unit }: { label: string; value: numbe
       </div>
       <div className="h-2 rounded-full bg-[#F1F2F4] overflow-hidden">
         <div className="h-full bg-[#0D9488] rounded-full" style={{ width: `${pct}%` }} />
+      </div>
+    </div>
+  );
+}
+
+// Lets a logged entry move to a different meal slot, and — when its
+// original food is still in the person's library — also change how many
+// servings were logged, recalculating every nutrient from that food's
+// per-serving values rather than just editing the numbers directly (which
+// would drift out of sync with the food's real nutrition).
+function EntryEditForm({
+  entry,
+  originalFood,
+  onSave,
+  onCancel,
+}: {
+  entry: FoodLogEntry;
+  originalFood: FoodItem | undefined;
+  onSave: (patch: Partial<Omit<FoodLogEntry, "id">>) => void;
+  onCancel: () => void;
+}) {
+  const [mealSlot, setMealSlot] = useState<MealSlot>(entry.mealSlot);
+  const [quantity, setQuantity] = useState(String(entry.quantity));
+
+  const handleSave = () => {
+    const patch: Partial<Omit<FoodLogEntry, "id">> = { mealSlot };
+    if (originalFood) {
+      const qty = Number(quantity) || entry.quantity;
+      const s = scaleFood(originalFood, qty);
+      const totalQty = originalFood.servingQty * qty;
+      const qtyStr = Number.isInteger(totalQty) ? String(totalQty) : totalQty.toFixed(1);
+      patch.quantity = qty;
+      patch.servingLabel = `${qtyStr} ${originalFood.servingUnit}`;
+      patch.calories = s.calories;
+      patch.proteinG = s.proteinG;
+      patch.fiberG = s.fiberG;
+      patch.sugarG = s.sugarG;
+      patch.fatG = s.fatG;
+      patch.carbsG = s.carbsG;
+      patch.sodiumMg = s.sodiumMg;
+    }
+    onSave(patch);
+  };
+
+  return (
+    <div className="px-3 pb-3 pt-1 border-t border-[#F1F2F4]">
+      <p className="text-[10px] text-[#6B7280] mb-1.5">Move to</p>
+      <div className="flex flex-wrap gap-1.5 mb-3">
+        {MEAL_SLOT_ORDER.map((slot) => (
+          <button
+            key={slot}
+            onClick={() => setMealSlot(slot)}
+            className={`text-[11px] px-2.5 py-1 rounded-full border ${
+              mealSlot === slot ? "bg-[#0D9488] text-white border-[#0D9488]" : "border-[#E5E7EB] text-[#6B7280]"
+            }`}
+          >
+            {MEAL_SLOT_LABELS[slot]}
+          </button>
+        ))}
+      </div>
+      {originalFood ? (
+        <div className="mb-3">
+          <label className="text-[10px] text-[#6B7280]">
+            Servings (1 = {originalFood.servingQty} {originalFood.servingUnit})
+          </label>
+          <input
+            type="number"
+            inputMode="decimal"
+            value={quantity}
+            onChange={(e) => setQuantity(e.target.value)}
+            className="w-full mt-0.5 bg-[#F7F8FA] border border-[#E5E7EB] rounded-md px-2 py-1.5 text-sm font-mono text-[#1D2027] focus:outline-none focus:border-[#0D9488]"
+          />
+        </div>
+      ) : (
+        <p className="text-[11px] text-[#9CA3AF] mb-3">
+          Serving size can't be recalculated for this entry (its original food isn't in your library anymore), but
+          you can still move it to a different meal.
+        </p>
+      )}
+      <div className="flex gap-2">
+        <button onClick={handleSave} className="flex-1 rounded-md bg-[#0D9488] text-white text-xs font-medium py-1.5">
+          Save changes
+        </button>
+        <button onClick={onCancel} className="px-3 rounded-md border border-[#E5E7EB] text-xs text-[#6B7280]">
+          Cancel
+        </button>
       </div>
     </div>
   );
@@ -121,6 +208,7 @@ export default function FoodPage() {
   const [showGoalsEditor, setShowGoalsEditor] = useState(false);
   const [showFullNutrition, setShowFullNutrition] = useState(false);
   const [expandedEntryId, setExpandedEntryId] = useState<string | null>(null);
+  const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
 
   const isToday = date === todayDateString();
 
@@ -173,6 +261,12 @@ export default function FoodPage() {
     return `${qtyStr} ${food.servingUnit}`;
   };
 
+  const updateEntry = async (entry: FoodLogEntry, patch: Partial<Omit<FoodLogEntry, "id">>) => {
+    setEntries((prev) => prev.map((x) => (x.id === entry.id ? { ...x, ...patch } : x)));
+    await updateLogEntry(entry.id, patch);
+    setEditingEntryId(null);
+  };
+
   const logFood = async (food: FoodItem, quantity: number, mealSlot: MealSlot, notes: string | null) => {
     if (!user) return;
     const s = scaleFood(food, quantity);
@@ -186,6 +280,48 @@ export default function FoodPage() {
       notes,
       servingLabel: servingLabelFor(food, quantity),
       ...s,
+    });
+    if (created) setEntries((prev) => [...prev, created]);
+  };
+
+  // Logs a food in a measurement that has nothing to do with its stored
+  // serving (e.g. logging tablespoons for a food saved in cups). The scaled
+  // nutrition is computed by the caller (AddFoodPanel) and passed straight
+  // through — this is a one-off snapshot, so it doesn't touch the food's own
+  // stored unit in My Foods.
+  const logFoodCustom = async (
+    food: FoodItem,
+    custom: {
+      qty: number;
+      unit: string;
+      calories: number;
+      proteinG: number;
+      fiberG: number;
+      sugarG: number;
+      fatG: number;
+      carbsG: number;
+      sodiumMg: number;
+    },
+    mealSlot: MealSlot,
+    notes: string | null
+  ) => {
+    if (!user) return;
+    const created = await addLogEntry(user.id, {
+      date,
+      entryName: food.name,
+      quantity: custom.qty,
+      sourceType: "food",
+      sourceId: food.id,
+      mealSlot,
+      notes,
+      servingLabel: `${custom.qty} ${custom.unit}`,
+      calories: custom.calories,
+      proteinG: custom.proteinG,
+      fiberG: custom.fiberG,
+      sugarG: custom.sugarG,
+      fatG: custom.fatG,
+      carbsG: custom.carbsG,
+      sodiumMg: custom.sodiumMg,
     });
     if (created) setEntries((prev) => [...prev, created]);
   };
@@ -376,41 +512,62 @@ export default function FoodPage() {
                             </span>
                           </button>
                           {isExpanded && (
-                            <div className="px-3 pb-3 pt-1 border-t border-[#F1F2F4]">
-                              <p className="text-[11px] text-[#6B7280] mb-2">
-                                {e.servingLabel ?? `${e.quantity} serving${e.quantity === 1 ? "" : "s"}`}
-                              </p>
-                              <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
-                                <div className="flex justify-between">
-                                  <span className="text-[#6B7280]">Calories</span>
-                                  <span className="tabular-nums text-[#1D2027]">{Math.round(e.calories)}</span>
+                            editingEntryId === e.id ? (
+                              <EntryEditForm
+                                entry={e}
+                                originalFood={
+                                  e.sourceType === "food" && e.sourceId
+                                    ? myFoods.find((f) => f.id === e.sourceId)
+                                    : undefined
+                                }
+                                onCancel={() => setEditingEntryId(null)}
+                                onSave={(patch) => updateEntry(e, patch)}
+                              />
+                            ) : (
+                              <div className="px-3 pb-3 pt-1 border-t border-[#F1F2F4]">
+                                <div className="flex items-center justify-between mb-2">
+                                  <p className="text-[11px] text-[#6B7280]">
+                                    {e.servingLabel ?? `${e.quantity} serving${e.quantity === 1 ? "" : "s"}`}
+                                  </p>
+                                  <button
+                                    onClick={() => setEditingEntryId(e.id)}
+                                    className="text-[11px] text-[#0D9488] font-medium"
+                                  >
+                                    Edit
+                                  </button>
                                 </div>
-                                <div className="flex justify-between">
-                                  <span className="text-[#6B7280]">Protein</span>
-                                  <span className="tabular-nums text-[#1D2027]">{Math.round(e.proteinG)} g</span>
-                                </div>
-                                <div className="flex justify-between">
-                                  <span className="text-[#6B7280]">Fiber</span>
-                                  <span className="tabular-nums text-[#1D2027]">{Math.round(e.fiberG)} g</span>
-                                </div>
-                                <div className="flex justify-between">
-                                  <span className="text-[#6B7280]">Sugar</span>
-                                  <span className="tabular-nums text-[#1D2027]">{Math.round(e.sugarG)} g</span>
-                                </div>
-                                <div className="flex justify-between">
-                                  <span className="text-[#6B7280]">Fat</span>
-                                  <span className="tabular-nums text-[#1D2027]">{Math.round(e.fatG)} g</span>
-                                </div>
-                                <div className="flex justify-between">
-                                  <span className="text-[#6B7280]">Carbs</span>
-                                  <span className="tabular-nums text-[#1D2027]">{Math.round(e.carbsG)} g</span>
-                                </div>
-                                <div className="flex justify-between col-span-2">
-                                  <span className="text-[#6B7280]">Sodium</span>
-                                  <span className="tabular-nums text-[#1D2027]">{Math.round(e.sodiumMg)} mg</span>
+                                <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                                  <div className="flex justify-between">
+                                    <span className="text-[#6B7280]">Calories</span>
+                                    <span className="tabular-nums text-[#1D2027]">{Math.round(e.calories)}</span>
+                                  </div>
+                                  <div className="flex justify-between">
+                                    <span className="text-[#6B7280]">Protein</span>
+                                    <span className="tabular-nums text-[#1D2027]">{Math.round(e.proteinG)} g</span>
+                                  </div>
+                                  <div className="flex justify-between">
+                                    <span className="text-[#6B7280]">Fiber</span>
+                                    <span className="tabular-nums text-[#1D2027]">{Math.round(e.fiberG)} g</span>
+                                  </div>
+                                  <div className="flex justify-between">
+                                    <span className="text-[#6B7280]">Sugar</span>
+                                    <span className="tabular-nums text-[#1D2027]">{Math.round(e.sugarG)} g</span>
+                                  </div>
+                                  <div className="flex justify-between">
+                                    <span className="text-[#6B7280]">Fat</span>
+                                    <span className="tabular-nums text-[#1D2027]">{Math.round(e.fatG)} g</span>
+                                  </div>
+                                  <div className="flex justify-between">
+                                    <span className="text-[#6B7280]">Carbs</span>
+                                    <span className="tabular-nums text-[#1D2027]">{Math.round(e.carbsG)} g</span>
+                                  </div>
+                                  <div className="flex justify-between col-span-2">
+                                    <span className="text-[#6B7280]">Sodium</span>
+                                    <span className="tabular-nums text-[#1D2027]">{Math.round(e.sodiumMg)} mg</span>
+                                  </div>
                                 </div>
                               </div>
-                            </div>
+                            )
                           )}
                         </div>
                       );
@@ -449,6 +606,7 @@ export default function FoodPage() {
             recipes={recipes}
             onClose={() => setShowAdd(false)}
             onLogFood={logFood}
+            onLogFoodCustom={logFoodCustom}
             onLogMeal={logMeal}
             onLogRecipe={logRecipe}
             onSaveSearchResult={async (result: FoodSearchResult) => {
