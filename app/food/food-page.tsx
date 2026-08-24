@@ -4,7 +4,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import AppShell from "@/components/AppShell";
-import AddFoodPanel from "@/components/food/AddFoodPanel";
+import AddFoodPanel, { MeasurementQuantityPicker, QuantityPick } from "@/components/food/AddFoodPanel";
 import MealsRecipesManager from "@/components/food/MealsRecipesManager";
 import { useAuth } from "@/lib/useAuth";
 import { FoodItem, FoodLogEntry, MealSlot, MealWithItems, NutritionGoals, RecipeWithIngredients } from "@/lib/types";
@@ -56,38 +56,70 @@ function ProgressBar({ label, value, goal, unit }: { label: string; value: numbe
 // servings were logged, recalculating every nutrient from that food's
 // per-serving values rather than just editing the numbers directly (which
 // would drift out of sync with the food's real nutrition).
+function round1(n: number) {
+  return Math.round(n * 10) / 10;
+}
+
+// Scales off the entry's OWN snapshot values (calories/quantity etc as
+// logged) rather than re-deriving from the source food. That's what makes
+// this correct for every entry, regardless of how it was originally
+// logged: a plain food serving, a custom measurement (e.g. "2 tbsp" of a
+// food stored in cups), a meal, or a recipe — and it still works even if
+// the source food was later deleted from the library.
 function EntryEditForm({
   entry,
-  originalFood,
   onSave,
   onCancel,
 }: {
   entry: FoodLogEntry;
-  originalFood: FoodItem | undefined;
   onSave: (patch: Partial<Omit<FoodLogEntry, "id">>) => void;
   onCancel: () => void;
 }) {
   const [mealSlot, setMealSlot] = useState<MealSlot>(entry.mealSlot);
-  const [quantity, setQuantity] = useState(String(entry.quantity));
+  const [showServingPicker, setShowServingPicker] = useState(false);
 
-  const handleSave = () => {
-    const patch: Partial<Omit<FoodLogEntry, "id">> = { mealSlot };
-    if (originalFood) {
-      const qty = Number(quantity) || entry.quantity;
-      const s = scaleFood(originalFood, qty);
-      const totalQty = originalFood.servingQty * qty;
-      const qtyStr = Number.isInteger(totalQty) ? String(totalQty) : totalQty.toFixed(1);
-      patch.quantity = qty;
-      patch.servingLabel = `${qtyStr} ${originalFood.servingUnit}`;
-      patch.calories = s.calories;
-      patch.proteinG = s.proteinG;
-      patch.fiberG = s.fiberG;
-      patch.sugarG = s.sugarG;
-      patch.fatG = s.fatG;
-      patch.carbsG = s.carbsG;
-      patch.sodiumMg = s.sodiumMg;
+  const baseUnit = entry.servingLabel ? entry.servingLabel.split(" ").slice(1).join(" ") || "serving" : "serving";
+  const qtyDivisor = entry.quantity || 1;
+  const perUnit = {
+    calories: entry.calories / qtyDivisor,
+    proteinG: entry.proteinG / qtyDivisor,
+    fiberG: entry.fiberG / qtyDivisor,
+    sugarG: entry.sugarG / qtyDivisor,
+    fatG: entry.fatG / qtyDivisor,
+    carbsG: entry.carbsG / qtyDivisor,
+    sodiumMg: entry.sodiumMg / qtyDivisor,
+  };
+
+  const applyServingPick = (pick: QuantityPick) => {
+    if (pick.mode === "base") {
+      const qty = pick.qty;
+      onSave({
+        mealSlot,
+        quantity: qty,
+        servingLabel: `${qty} ${baseUnit}`,
+        calories: round1(perUnit.calories * qty),
+        proteinG: round1(perUnit.proteinG * qty),
+        fiberG: round1(perUnit.fiberG * qty),
+        sugarG: round1(perUnit.sugarG * qty),
+        fatG: round1(perUnit.fatG * qty),
+        carbsG: round1(perUnit.carbsG * qty),
+        sodiumMg: round1(perUnit.sodiumMg * qty),
+      });
+      return;
     }
-    onSave(patch);
+    const scale = pick.newGrams / pick.baseGrams;
+    onSave({
+      mealSlot,
+      quantity: pick.qty,
+      servingLabel: `${pick.qty} ${pick.unit}`,
+      calories: round1(perUnit.calories * scale),
+      proteinG: round1(perUnit.proteinG * scale),
+      fiberG: round1(perUnit.fiberG * scale),
+      sugarG: round1(perUnit.sugarG * scale),
+      fatG: round1(perUnit.fatG * scale),
+      carbsG: round1(perUnit.carbsG * scale),
+      sodiumMg: round1(perUnit.sodiumMg * scale),
+    });
   };
 
   return (
@@ -106,33 +138,33 @@ function EntryEditForm({
           </button>
         ))}
       </div>
-      {originalFood ? (
-        <div className="mb-3">
-          <label className="text-[10px] text-[#6B7280]">
-            Servings (1 = {originalFood.servingQty} {originalFood.servingUnit})
-          </label>
-          <input
-            type="number"
-            inputMode="decimal"
-            value={quantity}
-            onChange={(e) => setQuantity(e.target.value)}
-            className="w-full mt-0.5 bg-[#F7F8FA] border border-[#E5E7EB] rounded-md px-2 py-1.5 text-sm font-mono text-[#1D2027] focus:outline-none focus:border-[#0D9488]"
-          />
-        </div>
+
+      {showServingPicker ? (
+        <MeasurementQuantityPicker
+          baseQty={1}
+          baseUnit={baseUnit}
+          onConfirm={applyServingPick}
+          onCancel={() => setShowServingPicker(false)}
+        />
       ) : (
-        <p className="text-[11px] text-[#9CA3AF] mb-3">
-          Serving size can't be recalculated for this entry (its original food isn't in your library anymore), but
-          you can still move it to a different meal.
-        </p>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setShowServingPicker(true)}
+            className="flex-1 rounded-md border border-[#0D9488] text-[#0D9488] text-xs font-medium py-1.5"
+          >
+            Change serving size
+          </button>
+          <button
+            onClick={() => onSave({ mealSlot })}
+            className="flex-1 rounded-md bg-[#0D9488] text-white text-xs font-medium py-1.5"
+          >
+            Save changes
+          </button>
+          <button onClick={onCancel} className="px-3 rounded-md border border-[#E5E7EB] text-xs text-[#6B7280]">
+            Cancel
+          </button>
+        </div>
       )}
-      <div className="flex gap-2">
-        <button onClick={handleSave} className="flex-1 rounded-md bg-[#0D9488] text-white text-xs font-medium py-1.5">
-          Save changes
-        </button>
-        <button onClick={onCancel} className="px-3 rounded-md border border-[#E5E7EB] text-xs text-[#6B7280]">
-          Cancel
-        </button>
-      </div>
     </div>
   );
 }
@@ -209,6 +241,7 @@ export default function FoodPage() {
   const [showFullNutrition, setShowFullNutrition] = useState(false);
   const [expandedEntryId, setExpandedEntryId] = useState<string | null>(null);
   const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
+  const [cloningEntryId, setCloningEntryId] = useState<string | null>(null);
 
   const isToday = date === todayDateString();
 
@@ -265,6 +298,32 @@ export default function FoodPage() {
     setEntries((prev) => prev.map((x) => (x.id === entry.id ? { ...x, ...patch } : x)));
     await updateLogEntry(entry.id, patch);
     setEditingEntryId(null);
+  };
+
+  // Duplicates an entry's exact logged snapshot (same food, quantity, unit,
+  // and nutrition) into whichever meal slot is chosen — handy for "I had
+  // this again" without re-searching, and works the same regardless of
+  // whether the entry came from a food, a meal, or a recipe.
+  const cloneEntry = async (entry: FoodLogEntry, mealSlot: MealSlot) => {
+    if (!user) return;
+    const created = await addLogEntry(user.id, {
+      date,
+      entryName: entry.entryName,
+      quantity: entry.quantity,
+      sourceType: entry.sourceType,
+      sourceId: entry.sourceId,
+      mealSlot,
+      notes: entry.notes,
+      servingLabel: entry.servingLabel,
+      calories: entry.calories,
+      proteinG: entry.proteinG,
+      fiberG: entry.fiberG,
+      sugarG: entry.sugarG,
+      fatG: entry.fatG,
+      carbsG: entry.carbsG,
+      sodiumMg: entry.sodiumMg,
+    });
+    if (created) setEntries((prev) => [...prev, created]);
   };
 
   const logFood = async (food: FoodItem, quantity: number, mealSlot: MealSlot, notes: string | null) => {
@@ -515,26 +574,53 @@ export default function FoodPage() {
                             editingEntryId === e.id ? (
                               <EntryEditForm
                                 entry={e}
-                                originalFood={
-                                  e.sourceType === "food" && e.sourceId
-                                    ? myFoods.find((f) => f.id === e.sourceId)
-                                    : undefined
-                                }
                                 onCancel={() => setEditingEntryId(null)}
                                 onSave={(patch) => updateEntry(e, patch)}
                               />
+                            ) : cloningEntryId === e.id ? (
+                              <div className="px-3 pb-3 pt-1 border-t border-[#F1F2F4]">
+                                <p className="text-[10px] text-[#6B7280] mb-1.5">Duplicate to</p>
+                                <div className="flex flex-wrap gap-1.5 mb-2">
+                                  {MEAL_SLOT_ORDER.map((slot) => (
+                                    <button
+                                      key={slot}
+                                      onClick={() => {
+                                        cloneEntry(e, slot);
+                                        setCloningEntryId(null);
+                                      }}
+                                      className="text-[11px] px-2.5 py-1 rounded-full border border-[#E5E7EB] text-[#6B7280] hover:border-[#0D9488] hover:text-[#0D9488]"
+                                    >
+                                      {MEAL_SLOT_LABELS[slot]}
+                                    </button>
+                                  ))}
+                                </div>
+                                <button
+                                  onClick={() => setCloningEntryId(null)}
+                                  className="text-[11px] text-[#6B7280]"
+                                >
+                                  Cancel
+                                </button>
+                              </div>
                             ) : (
                               <div className="px-3 pb-3 pt-1 border-t border-[#F1F2F4]">
                                 <div className="flex items-center justify-between mb-2">
                                   <p className="text-[11px] text-[#6B7280]">
                                     {e.servingLabel ?? `${e.quantity} serving${e.quantity === 1 ? "" : "s"}`}
                                   </p>
-                                  <button
-                                    onClick={() => setEditingEntryId(e.id)}
-                                    className="text-[11px] text-[#0D9488] font-medium"
-                                  >
-                                    Edit
-                                  </button>
+                                  <div className="flex items-center gap-2">
+                                    <button
+                                      onClick={() => setCloningEntryId(e.id)}
+                                      className="text-[11px] text-[#0D9488] font-medium"
+                                    >
+                                      Duplicate
+                                    </button>
+                                    <button
+                                      onClick={() => setEditingEntryId(e.id)}
+                                      className="text-[11px] text-[#0D9488] font-medium"
+                                    >
+                                      Edit
+                                    </button>
+                                  </div>
                                 </div>
                                 <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
                                   <div className="flex justify-between">

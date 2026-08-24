@@ -69,7 +69,7 @@ export type QuantityPick =
 // "Different measurement" lets the person log in a unit that has nothing to
 // do with the stored serving (e.g. tablespoons for a food stored in cups)
 // by asking for the gram-weight of both servings and scaling between them.
-function MeasurementQuantityPicker({
+export function MeasurementQuantityPicker({
   baseQty,
   baseUnit,
   onConfirm,
