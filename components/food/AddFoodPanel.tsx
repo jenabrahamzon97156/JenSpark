@@ -55,6 +55,121 @@ function QuantityPicker({
   );
 }
 
+function round1(n: number) {
+  return Math.round(n * 10) / 10;
+}
+
+export type SearchAddPick =
+  | { mode: "grams"; qty: number }
+  | { mode: "custom"; qty: number; unit: string; gramsPerUnit: number };
+
+function SearchQuantityPicker({ onConfirm, onCancel }: { onConfirm: (pick: SearchAddPick) => void; onCancel: () => void }) {
+  const [mode, setMode] = useState<"grams" | "custom">("grams");
+  const [gramsQty, setGramsQty] = useState("1");
+  const [customQty, setCustomQty] = useState("1");
+  const [customUnit, setCustomUnit] = useState("cup");
+  const [customGrams, setCustomGrams] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  const confirm = () => {
+    if (mode === "grams") {
+      onConfirm({ mode: "grams", qty: Number(gramsQty) || 1 });
+      return;
+    }
+    const grams = Number(customGrams);
+    if (!grams) {
+      setError("Enter how many grams that measurement equals.");
+      return;
+    }
+    onConfirm({ mode: "custom", qty: Number(customQty) || 1, unit: customUnit, gramsPerUnit: grams });
+  };
+
+  return (
+    <div className="rounded-lg border border-[#0D9488] bg-[#0D9488]/5 p-3 mt-2">
+      <div className="flex gap-1.5 mb-2">
+        <button
+          type="button"
+          onClick={() => setMode("grams")}
+          className={`text-[11px] px-2.5 py-1 rounded-full border ${
+            mode === "grams" ? "bg-[#1D2027] text-white border-[#1D2027]" : "border-[#E5E7EB] text-[#6B7280]"
+          }`}
+        >
+          Servings of 100g
+        </button>
+        <button
+          type="button"
+          onClick={() => setMode("custom")}
+          className={`text-[11px] px-2.5 py-1 rounded-full border ${
+            mode === "custom" ? "bg-[#1D2027] text-white border-[#1D2027]" : "border-[#E5E7EB] text-[#6B7280]"
+          }`}
+        >
+          Different measurement
+        </button>
+      </div>
+
+      {mode === "grams" ? (
+        <div className="flex gap-2">
+          <input
+            type="number"
+            inputMode="decimal"
+            value={gramsQty}
+            onChange={(e) => setGramsQty(e.target.value)}
+            className="flex-1 min-w-0 bg-white border border-[#E5E7EB] rounded-md px-2 py-2 text-sm font-mono text-[#1D2027] focus:outline-none focus:border-[#0D9488]"
+          />
+          <button onClick={confirm} className="px-4 rounded-md bg-[#0D9488] text-white text-sm font-medium">
+            Add
+          </button>
+          <button onClick={onCancel} className="px-3 rounded-md border border-[#E5E7EB] text-sm text-[#6B7280]">
+            Cancel
+          </button>
+        </div>
+      ) : (
+        <div>
+          <div className="grid grid-cols-2 gap-2 mb-2">
+            <input
+              type="number"
+              value={customQty}
+              onChange={(e) => setCustomQty(e.target.value)}
+              placeholder="Qty"
+              className="min-w-0 bg-white border border-[#E5E7EB] rounded-md px-2 py-2 text-sm text-[#1D2027]"
+            />
+            <select
+              value={customUnit}
+              onChange={(e) => setCustomUnit(e.target.value)}
+              className="min-w-0 bg-white border border-[#E5E7EB] rounded-md px-2 py-2 text-sm text-[#1D2027]"
+            >
+              {["each", "cup", "tbsp", "tsp", "oz", "slice", "piece", "scoop", "bar", "ml"].map((u) => (
+                <option key={u} value={u}>
+                  {u}
+                </option>
+              ))}
+            </select>
+          </div>
+          <label className="text-[10px] text-[#6B7280]">
+            How many grams is {customQty || "1"} {customUnit}?
+          </label>
+          <input
+            type="number"
+            value={customGrams}
+            onChange={(e) => setCustomGrams(e.target.value)}
+            placeholder="e.g. 195"
+            className="w-full mt-0.5 mb-2 bg-white border border-[#E5E7EB] rounded-md px-2 py-1.5 text-sm text-[#1D2027]"
+          />
+          {error && <p className="text-[11px] text-[#DC2626] mb-2">{error}</p>}
+          <div className="flex gap-2">
+            <button onClick={confirm} className="flex-1 rounded-md bg-[#0D9488] text-white text-sm font-medium py-2">
+              Add
+            </button>
+            <button onClick={onCancel} className="px-3 rounded-md border border-[#E5E7EB] text-sm text-[#6B7280]">
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SearchResultRow({
   result,
   sourceLabel,
@@ -62,19 +177,31 @@ function SearchResultRow({
   onPick,
   onConfirm,
   onCancelPick,
+  onSaveOnly,
 }: {
   result: FoodSearchResult;
   sourceLabel: string;
   picking: boolean;
   onPick: () => void;
-  onConfirm: (qty: number) => void;
+  onConfirm: (pick: SearchAddPick, existing: FoodItem | null) => void;
   onCancelPick: () => void;
+  onSaveOnly: () => Promise<FoodItem | null>;
 }) {
+  const [savedFood, setSavedFood] = useState<FoodItem | null>(null);
+  const [saving, setSaving] = useState(false);
   const looksEmpty =
     result.calories === 0 && result.proteinG === 0 && result.fatG === 0 && result.carbsG === 0 && result.sodiumMg === 0;
+
+  const handleSaveOnly = async () => {
+    setSaving(true);
+    const food = await onSaveOnly();
+    if (food) setSavedFood(food);
+    setSaving(false);
+  };
+
   return (
     <div className="rounded-lg border border-[#E5E7EB] p-2.5">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2">
         <div className="min-w-0">
           <p className="text-sm text-[#1D2027] truncate">{result.name}</p>
           <p className="text-xs text-[#6B7280]">
@@ -87,14 +214,26 @@ function SearchResultRow({
               another section, a more specific search term, or edit the values after adding.
             </p>
           )}
+          {savedFood && (
+            <p className="text-xs text-[#0D9488] mt-0.5">Saved &#10003; &mdash; edit it anytime in the My Foods tab.</p>
+          )}
         </div>
-        <button onClick={onPick} className="shrink-0 text-xs px-3 py-1 rounded-full bg-[#0D9488] text-white">
-          Add
-        </button>
+        <div className="flex items-center gap-1.5 shrink-0">
+          {!savedFood && (
+            <button
+              onClick={handleSaveOnly}
+              disabled={saving}
+              className="text-xs px-2.5 py-1 rounded-full border border-[#0D9488] text-[#0D9488] disabled:opacity-50"
+            >
+              {saving ? "Saving..." : "Save to My Foods"}
+            </button>
+          )}
+          <button onClick={onPick} className="text-xs px-3 py-1 rounded-full bg-[#0D9488] text-white">
+            Add
+          </button>
+        </div>
       </div>
-      {picking && (
-        <QuantityPicker label="Servings of 100g" onConfirm={onConfirm} onCancel={onCancelPick} />
-      )}
+      {picking && <SearchQuantityPicker onConfirm={(pick) => onConfirm(pick, savedFood)} onCancel={onCancelPick} />}
     </div>
   );
 }
@@ -422,6 +561,43 @@ export default function AddFoodPanel({
     );
   };
 
+  // Saves a search result to My Foods (unless it was already saved via the
+  // "Save to My Foods" button), then logs it. If the person picked a custom
+  // measurement (e.g. "1 cup = 195g") instead of plain 100g servings, the
+  // saved food is rewritten to that unit — with every nutrient rescaled to
+  // match — so it shows up in cups (not grams) from now on too.
+  const handleSearchAdd = async (result: FoodSearchResult, pick: SearchAddPick, existing: FoodItem | null) => {
+    const saved = existing ?? (await onSaveSearchResult(result));
+    if (!saved) {
+      setPickingResult(null);
+      return;
+    }
+    if (pick.mode === "grams") {
+      onLogFood(saved, pick.qty, mealSlot, notes || null);
+      setPickingResult(null);
+      return;
+    }
+    const scale = pick.gramsPerUnit / 100;
+    const converted = {
+      name: saved.name,
+      brand: saved.brand,
+      servingQty: pick.qty,
+      servingUnit: pick.unit,
+      calories: round1(saved.calories * scale),
+      proteinG: round1(saved.proteinG * scale),
+      fiberG: round1(saved.fiberG * scale),
+      sugarG: round1(saved.sugarG * scale),
+      fatG: round1(saved.fatG * scale),
+      carbsG: round1(saved.carbsG * scale),
+      sodiumMg: round1(saved.sodiumMg * scale),
+      source: saved.source,
+      externalId: saved.externalId,
+    };
+    await onUpdateFood(saved.id, converted);
+    onLogFood({ ...saved, ...converted }, 1, mealSlot, notes || null);
+    setPickingResult(null);
+  };
+
   const tabs: { id: Tab; label: string }[] = [
     { id: "search", label: "Search" },
     { id: "myFoods", label: "My Foods" },
@@ -549,12 +725,9 @@ export default function AddFoodPanel({
                       sourceLabel="USDA"
                       picking={pickingResult === r}
                       onPick={() => setPickingResult(r)}
-                      onConfirm={async (qty) => {
-                        const saved = await onSaveSearchResult(r);
-                        if (saved) onLogFood(saved, qty, mealSlot, notes || null);
-                        setPickingResult(null);
-                      }}
+                      onConfirm={(pick, existing) => handleSearchAdd(r, pick, existing)}
                       onCancelPick={() => setPickingResult(null)}
+                      onSaveOnly={() => onSaveSearchResult(r)}
                     />
                   ))}
                 </div>
@@ -576,12 +749,9 @@ export default function AddFoodPanel({
                       sourceLabel="API Ninjas"
                       picking={pickingResult === r}
                       onPick={() => setPickingResult(r)}
-                      onConfirm={async (qty) => {
-                        const saved = await onSaveSearchResult(r);
-                        if (saved) onLogFood(saved, qty, mealSlot, notes || null);
-                        setPickingResult(null);
-                      }}
+                      onConfirm={(pick, existing) => handleSearchAdd(r, pick, existing)}
                       onCancelPick={() => setPickingResult(null)}
+                      onSaveOnly={() => onSaveSearchResult(r)}
                     />
                   ))}
                 </div>
