@@ -6,6 +6,8 @@ import { useState } from "react";
 import { FoodItem, MealSlot, MealWithItems, RecipeWithIngredients } from "@/lib/types";
 import { searchFoods as searchUsda, FoodSearchResult } from "@/lib/usdaFoodData";
 import { searchFoods as searchApiNinjas } from "@/lib/apiNinjas";
+import { lookupBarcode } from "@/lib/barcodeLookup";
+import BarcodeScanner from "@/components/food/BarcodeScanner";
 import { MEAL_SLOT_LABELS, MEAL_SLOT_ORDER, sumFoods } from "@/lib/foodStore";
 
 type Tab = "search" | "myFoods" | "meals" | "recipes" | "manual";
@@ -560,6 +562,10 @@ export default function AddFoodPanel({
   const [editingFoodId, setEditingFoodId] = useState<string | null>(null);
   const [myFoodsFilter, setMyFoodsFilter] = useState("");
   const [importMessage, setImportMessage] = useState<string | null>(null);
+  const [scanningBarcode, setScanningBarcode] = useState(false);
+  const [barcodeLoading, setBarcodeLoading] = useState(false);
+  const [barcodeError, setBarcodeError] = useState<string | null>(null);
+  const [barcodeResult, setBarcodeResult] = useState<FoodSearchResult | null>(null);
 
   const [manual, setManual] = useState({
     name: "",
@@ -739,6 +745,60 @@ export default function AddFoodPanel({
 
       {tab === "search" && (
         <div>
+          {!scanningBarcode ? (
+            <button
+              onClick={() => {
+                setScanningBarcode(true);
+                setBarcodeResult(null);
+                setBarcodeError(null);
+              }}
+              className="w-full mb-3 flex items-center justify-center gap-1.5 rounded-md border border-[#0D9488] text-[#0D9488] text-sm font-medium py-2"
+            >
+              <span aria-hidden="true">&#128247;</span> Scan barcode
+            </button>
+          ) : (
+            <div className="mb-3">
+              <BarcodeScanner
+                onDetected={async (code) => {
+                  setScanningBarcode(false);
+                  setBarcodeLoading(true);
+                  setBarcodeError(null);
+                  try {
+                    const result = await lookupBarcode(code);
+                    if (!result) {
+                      setBarcodeError(
+                        `No product found for barcode ${code}. It may not be in Open Food Facts yet — try searching by name instead, or add it manually.`
+                      );
+                    } else {
+                      setBarcodeResult(result);
+                    }
+                  } catch (e) {
+                    setBarcodeError(e instanceof Error ? e.message : "Barcode lookup failed. Try again.");
+                  }
+                  setBarcodeLoading(false);
+                }}
+                onCancel={() => setScanningBarcode(false)}
+              />
+            </div>
+          )}
+
+          {barcodeLoading && <p className="text-sm text-[#6B7280] mb-3">Looking up that barcode...</p>}
+          {barcodeError && <p className="text-sm text-[#DC2626] mb-3">{barcodeError}</p>}
+          {barcodeResult && (
+            <div className="mb-3">
+              <p className="text-[11px] font-medium text-[#6B7280] uppercase tracking-wide mb-1.5">Scanned product</p>
+              <SearchResultRow
+                result={barcodeResult}
+                sourceLabel="the barcode scan"
+                picking={pickingResult === barcodeResult}
+                onPick={() => setPickingResult(barcodeResult)}
+                onConfirm={(pick, existing) => handleSearchAdd(barcodeResult, pick, existing)}
+                onCancelPick={() => setPickingResult(null)}
+                onSaveOnly={() => onSaveSearchResult(barcodeResult)}
+              />
+            </div>
+          )}
+
           <div className="flex gap-2 mb-4">
             <input
               value={query}
