@@ -503,6 +503,7 @@ export default function AddFoodPanel({
   meals,
   recipes,
   onLogFood,
+  onLogFoodCustom,
   onLogMeal,
   onLogRecipe,
   onSaveSearchResult,
