@@ -7,17 +7,24 @@
 // than all of html5-qrcode's supported types (which also includes QR codes)
 // so it locks onto a barcode faster and doesn't get distracted by other
 // codes that might be in frame.
+//
+// Deliberately simple: one camera request, no retry-with-different-
+// constraints logic. An earlier version tried a fast/low-res request first
+// and silently retried with a plain request if that failed — calling
+// start() twice on the same scanner instance turned out to be unreliable
+// (it could fail silently, with the camera never appearing and no error
+// shown). One request, wrapped defensively, is more predictable.
 
 import { useEffect, useRef, useState } from "react";
 
 const SCANNER_ELEMENT_ID = "barcode-scanner-viewport";
+const START_TIMEOUT_MS = 8000;
 
 // html5-qrcode's stop() can throw SYNCHRONOUSLY (not just reject a promise)
-// when called on a scanner that never actually reached a running state —
-// e.g. after a failed start(), or during fast open/close. A synchronous
-// throw inside a React effect cleanup crashes the whole app (Next.js's
-// generic "Application error" page), so every stop/clear call here is
-// wrapped defensively regardless of whether it throws sync or async.
+// when called on a scanner that never actually reached a running state.
+// A synchronous throw inside a React effect cleanup crashes the whole app
+// (Next.js's generic "Application error" page), so every stop/clear call
+// here is wrapped defensively regardless of whether it throws sync or async.
 function safeStopAndClear(scanner: any) {
   const clear = () => {
     try {
@@ -45,6 +52,7 @@ export default function BarcodeScanner({
   onDetected: (code: string) => void;
   onCancel: () => void;
 }) {
+  const [status, setStatus] = useState<"starting" | "ready" | "error">("starting");
   const [error, setError] = useState<string | null>(null);
   const scannerRef = useRef<any>(null);
   const stoppedRef = useRef(false);
@@ -52,6 +60,14 @@ export default function BarcodeScanner({
   useEffect(() => {
     stoppedRef.current = false;
     let cancelled = false;
+    let settled = false;
+
+    const timeoutId = setTimeout(() => {
+      if (settled || cancelled) return;
+      settled = true;
+      setStatus("error");
+      setError("The camera is taking too long to start. Close this and try again — you may need to grant camera access in Settings.");
+    }, START_TIMEOUT_MS);
 
     import("html5-qrcode")
       .then(({ Html5Qrcode, Html5QrcodeSupportedFormats }) => {
@@ -70,49 +86,66 @@ export default function BarcodeScanner({
             verbose: false,
           });
         } catch {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timeoutId);
+          setStatus("error");
           setError("Couldn't set up the scanner. Try closing and reopening this panel.");
           return;
         }
         scannerRef.current = scanner;
 
-        const onFrame = (decodedText: string) => {
-          if (stoppedRef.current) return;
-          stoppedRef.current = true;
-          safeStopAndClear(scanner);
-          onDetected(decodedText);
-        };
-        const onFrameError = () => {
-          // Fires continuously while no code is in frame — not an error.
-        };
-        const scanConfig = { fps: 15, qrbox: { width: 260, height: 120 }, disableFlip: true };
-
-        // Capping resolution is normally the biggest speed lever (less
-        // pixel data for the JS decoder to churn through per frame), but
-        // some phone cameras — especially in iOS PWA/home-screen mode —
-        // reject an exact width/height request outright rather than just
-        // using the closest available size. If that happens, fall back to
-        // an unconstrained request so scanning still works, just without
-        // the resolution-cap speed boost on that device.
-        scanner
-          .start({ facingMode: "environment", width: { ideal: 640 }, height: { ideal: 480 } } as any, scanConfig, onFrame, onFrameError)
-          .catch(() => {
-            if (cancelled) return;
-            scanner.start({ facingMode: "environment" } as any, scanConfig, onFrame, onFrameError).catch((err: unknown) => {
-              if (cancelled) return;
+        try {
+          scanner
+            .start(
+              { facingMode: "environment" } as any,
+              { fps: 10, qrbox: { width: 260, height: 130 }, disableFlip: true },
+              (decodedText: string) => {
+                if (stoppedRef.current) return;
+                stoppedRef.current = true;
+                safeStopAndClear(scanner);
+                onDetected(decodedText);
+              },
+              () => {
+                // Fires continuously while no code is in frame — not an error.
+              }
+            )
+            .then(() => {
+              if (cancelled || settled) return;
+              settled = true;
+              clearTimeout(timeoutId);
+              setStatus("ready");
+            })
+            .catch((err: unknown) => {
+              if (cancelled || settled) return;
+              settled = true;
+              clearTimeout(timeoutId);
+              setStatus("error");
               setError(
                 err instanceof Error && /permission|NotAllowed/i.test(err.message)
                   ? "Camera access was denied. Enable camera permission for this site in Settings, then try again."
                   : "Couldn't start the camera. Make sure no other app is using it, then try again."
               );
             });
-          });
+        } catch {
+          if (cancelled || settled) return;
+          settled = true;
+          clearTimeout(timeoutId);
+          setStatus("error");
+          setError("Couldn't start the camera. Make sure no other app is using it, then try again.");
+        }
       })
       .catch(() => {
-        if (!cancelled) setError("Couldn't load the barcode scanner. Check your connection and try again.");
+        if (cancelled || settled) return;
+        settled = true;
+        clearTimeout(timeoutId);
+        setStatus("error");
+        setError("Couldn't load the barcode scanner. Check your connection and try again.");
       });
 
     return () => {
       cancelled = true;
+      clearTimeout(timeoutId);
       if (scannerRef.current && !stoppedRef.current) {
         stoppedRef.current = true;
         safeStopAndClear(scannerRef.current);
@@ -122,7 +155,7 @@ export default function BarcodeScanner({
 
   return (
     <div className="rounded-lg border border-[#0D9488] bg-[#0D9488]/5 p-3">
-      {error ? (
+      {status === "error" ? (
         <div>
           <p className="text-sm text-[#DC2626] mb-2">{error}</p>
           <button onClick={onCancel} className="text-xs px-3 py-1.5 rounded-full border border-[#E5E7EB] text-[#6B7280]">
@@ -131,7 +164,8 @@ export default function BarcodeScanner({
         </div>
       ) : (
         <div>
-          <div id={SCANNER_ELEMENT_ID} className="rounded-md overflow-hidden bg-black" />
+          {status === "starting" && <p className="text-xs text-[#6B7280] mb-2">Starting camera...</p>}
+          <div id={SCANNER_ELEMENT_ID} className="rounded-md overflow-hidden bg-black min-h-[160px]" />
           <p className="text-xs text-[#6B7280] mt-2 mb-2">
             Point the camera at the barcode on the package. It scans automatically.
           </p>
