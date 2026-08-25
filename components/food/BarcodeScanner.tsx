@@ -43,8 +43,21 @@ export default function BarcodeScanner({
 
       scanner
         .start(
-          { facingMode: "environment" },
-          { fps: 10, qrbox: { width: 260, height: 160 } },
+          {
+            facingMode: "environment",
+            // Capping resolution is the single biggest speed lever here:
+            // the JS decoder has to process every pixel of every frame, and
+            // phone cameras default to a much higher resolution than a
+            // barcode scan needs. 640x480 is plenty to read a barcode from
+            // a few inches away and cuts the per-frame decode cost a lot.
+            width: { ideal: 640 },
+            height: { ideal: 480 },
+          } as any,
+          {
+            fps: 15,
+            qrbox: { width: 260, height: 120 },
+            disableFlip: true,
+          },
           (decodedText: string) => {
             if (stoppedRef.current) return;
             stoppedRef.current = true;
