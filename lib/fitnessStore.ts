@@ -206,7 +206,9 @@ export async function deleteSet(id: string) {
   if (error) console.error("Failed to delete set:", error.message);
 }
 
-// Default new weightlifting log entries to 3 sets, pre-filled with the
+const DEFAULT_SET_COUNT = 4;
+
+// Default new weightlifting log entries to 4 sets, pre-filled with the
 // weight/reps from the most recent previous session of the same exercise
 // (all three rows get that same last-known weight/reps as a starting point).
 export async function createDefaultSets(
@@ -214,9 +216,9 @@ export async function createDefaultSets(
   logId: string,
   typeName: string
 ): Promise<FitnessSet[]> {
-  const last = await fetchLastSetsForType(userId, typeName);
+  const last = await fetchLastSetsForType(userId, typeName, logId);
   const created: FitnessSet[] = [];
-  for (let i = 0; i < 3; i++) {
+  for (let i = 0; i < DEFAULT_SET_COUNT; i++) {
     const prior = last[i] ?? last[last.length - 1] ?? null;
     const s = await addSet(userId, logId, i + 1, prior?.weight ?? null, prior?.reps ?? null);
     if (s) created.push(s);
@@ -224,23 +226,58 @@ export async function createDefaultSets(
   return created;
 }
 
-async function fetchLastSetsForType(userId: string, typeName: string): Promise<FitnessSet[]> {
-  const { data: lastLog } = await supabase
+async function fetchLastSetsForType(
+  userId: string,
+  typeName: string,
+  excludeLogId: string
+): Promise<FitnessSet[]> {
+  // excludeLogId leaves out the log entry that's currently being created —
+  // without it, a same-day entry (which shares today's date with itself)
+  // could tie for "most recent" and match its own brand-new, still-empty
+  // row instead of the real last session. created_at as a secondary sort
+  // also makes the pick deterministic when two logs share the same date.
+  //
+  // The lookup is by exercise name only — it deliberately ignores which
+  // workout (if any) the earlier entry was logged under, so "Leg Press" picks
+  // up your last Leg Press weight whether you did it inside "Lifting FullBody
+  // - A", a different workout, or on its own.
+  //
+  // It also skips past earlier entries where no weight was ever filled in
+  // (e.g. you tapped "Log today" on a workout but skipped that exercise);
+  // otherwise one blank entry would make every later session default to
+  // blank too.
+  const { data: recentLogs } = await supabase
     .from("fitness_logs")
     .select("id")
     .eq("user_id", userId)
     .eq("category", "weightlifting")
     .eq("type_name", typeName)
+    .neq("id", excludeLogId)
     .order("date", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (!lastLog) return [];
+    .order("created_at", { ascending: false })
+    .limit(15);
+  if (!recentLogs || recentLogs.length === 0) return [];
+
   const { data: sets } = await supabase
     .from("fitness_sets")
     .select("*")
-    .eq("fitness_log_id", lastLog.id)
+    .in(
+      "fitness_log_id",
+      recentLogs.map((l: any) => l.id)
+    )
     .order("set_number", { ascending: true });
-  return (sets ?? []).map(rowToSet);
+
+  const setsByLog: Record<string, FitnessSet[]> = {};
+  for (const s of sets ?? []) {
+    setsByLog[s.fitness_log_id] = setsByLog[s.fitness_log_id] ?? [];
+    setsByLog[s.fitness_log_id].push(rowToSet(s));
+  }
+
+  for (const l of recentLogs) {
+    const logSets = setsByLog[l.id] ?? [];
+    if (logSets.some((s) => s.weight != null)) return logSets;
+  }
+  return [];
 }
 
 // Types & history --------------------------------------------------------------
@@ -320,14 +357,38 @@ export async function fetchAllFitnessDatesInRange(
 // Workout templates -------------------------------------------------------------
 
 export async function fetchWorkouts(userId: string): Promise<WorkoutTemplate[]> {
-  const { data: workouts, error } = await supabase
+  const { data: rawWorkouts, error } = await supabase
     .from("workouts")
     .select("*")
-    .eq("user_id", userId)
-    .order("name");
-  if (error || !workouts) return [];
+    .eq("user_id", userId);
+  if (error || !rawWorkouts) return [];
 
   const { data: items } = await supabase.from("workout_items").select("*").eq("user_id", userId);
+
+  // Most recently done first: each workout is ranked by the latest date it
+  // was logged (fitness_logs rows tagged with its id). Workouts that have
+  // never been logged come after, newest-created first. Only the most recent
+  // 1000 workout log rows are scanned, which is plenty to rank anything
+  // you've done lately.
+  const { data: usage } = await supabase
+    .from("fitness_logs")
+    .select("workout_id, date")
+    .eq("user_id", userId)
+    .not("workout_id", "is", null)
+    .order("date", { ascending: false })
+    .limit(1000);
+  const lastUsed: Record<string, string> = {};
+  for (const u of usage ?? []) {
+    if (u.workout_id && !lastUsed[u.workout_id]) lastUsed[u.workout_id] = u.date as string;
+  }
+  const workouts = [...rawWorkouts].sort((a: any, b: any) => {
+    const la = lastUsed[a.id];
+    const lb = lastUsed[b.id];
+    if (la && lb) return la === lb ? String(b.created_at).localeCompare(String(a.created_at)) : lb.localeCompare(la);
+    if (la) return -1;
+    if (lb) return 1;
+    return String(b.created_at).localeCompare(String(a.created_at));
+  });
 
   return workouts.map((w: any) => ({
     id: w.id,

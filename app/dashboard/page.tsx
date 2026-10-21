@@ -77,7 +77,7 @@ export default function FitnessPage() {
     if (!user) return;
     const created = await createLog(user.id, { date, workoutId: null, imageUrl: null, ...input });
     if (!created) return;
-    // Weightlifting entries default to 3 sets, pre-filled from last time
+    // Weightlifting entries default to 4 sets, pre-filled from last time
     // this exercise was logged.
     if (created.category === "weightlifting") {
       created.sets = await createDefaultSets(user.id, created.id, created.typeName);
@@ -90,6 +90,8 @@ export default function FitnessPage() {
     if (!user) return;
     const created = await logWorkoutForDate(user.id, workout, date);
     setLogs((prev) => [...prev, ...created]);
+    // Re-sort the workouts list now that this one was just used.
+    fetchWorkouts(user.id).then(setWorkouts);
     setShowWorkouts(false);
     if (date !== todayDateString()) setDate(todayDateString());
   };
